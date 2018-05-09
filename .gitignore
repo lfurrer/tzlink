@@ -1,3 +1,8 @@
+# Large blobs
+data/wvec_50_haodi-li-et-al.bin
+data/ncbi-disease/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
