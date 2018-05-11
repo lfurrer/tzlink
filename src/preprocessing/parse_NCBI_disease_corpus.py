@@ -37,10 +37,8 @@ def _split_documents(file):
 
 
 def _parse_document(lines):
-    title_line = lines[0].split('|')
-    docid = title_line[0] #id is in the first position
-    title = max(title_line, key=len)
-    abstract = max(lines[1].split('|'), key=len)
+    docid, _, title = lines[0].split('|')
+    _, _, abstract = lines[1].split('|')
     abstract_offset = len(title)+1
     title_mentions = []
     abstract_mentions = []
