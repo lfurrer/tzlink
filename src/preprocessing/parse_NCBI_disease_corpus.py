@@ -4,13 +4,13 @@
 
 def parse_NCBI_disease_corpus(filename):
     '''
-    Parse the NCBI-disease corpus format.
+    Convert the NCBI-disease corpus to our document-interchange format.
 
     @Args:
         filenames: "NCBItrainset_corpus.txt", "NCBIdevelopset_corpus.txt",
                    or "NCBItestset_corpus.txt"
     @Returns:
-        a list of instances in our document-interchange format
+        iter(dict(...)): iterator over documents (nested dicts/lists)
     '''
     with open(filename, "r") as file:
         file = file.readlines() #read all the things into a list
@@ -32,8 +32,7 @@ def parse_NCBI_disease_corpus(filename):
     #sanity check, should be 593 instances for training corpus
     #print('Number of instances:',len(entry_list))
 
-    #now parse each instance into a list of the interchange format
-    parsed_corpus_list = []
+    #now parse each instance
     for instance in entry_list:
         cache_entry = instance.split('\n') #break the instance into lines by \n
         cache_entry[:] = [item for item in cache_entry if item != '']
@@ -75,5 +74,5 @@ def parse_NCBI_disease_corpus(filename):
                 'mentions': abstract_mentions
             }
         ]
-        parsed_corpus_list.append({'docid': docid, 'sections': sections})
-    return parsed_corpus_list
+        doc = {'docid': docid, 'sections': sections}
+        yield doc
