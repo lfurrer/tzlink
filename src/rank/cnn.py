@@ -4,7 +4,6 @@
 # Author: Lenz Furrer, 2018
 
 
-import os
 import argparse
 
 from keras.models import Model
@@ -33,8 +32,8 @@ def _run(conf):
 def _create_model(conf, embeddings=None):
     inp_q, inp_a = (Input(shape=(conf.rank.sample_size,)) for _ in range(2))
     emb = _embedding_layer(conf, embeddings)
-    sem_q = _semantic_layers(emb(inp_q))
-    sem_a = _semantic_layers(emb(inp_a))
+    sem_q = _semantic_layers(conf, emb(inp_q))
+    sem_a = _semantic_layers(conf, emb(inp_a))
     v_sem = Dot(-1)(sem_q, sem_a)
     join_layer = Concatenate()([sem_q, v_sem, sem_a])
     hidden_layer = Dense(units=1+2*conf.rank.n_kernels,
@@ -66,7 +65,7 @@ def _embedding_layer(conf, matrix=None):
     return layer
 
 
-def _semantic_layers(x):
+def _semantic_layers(conf, x):
     x = Conv1D(conf.rank.n_kernels,
                kernel_size=conf.rank.filter_width,
                activation=conf.rank.activation,
