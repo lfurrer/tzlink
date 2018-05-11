@@ -46,8 +46,6 @@ def _parse_document(lines):
     abstract_mentions = []
     for mention in lines[2:]: #the mentions are documented from the third line
         cache_mention = mention.split('\t')
-        # Some lists contain empty elements because of the ugly format :P
-        cache_mention[:] = [item for item in cache_mention if item]
         cache_dict = {
             'start': int(cache_mention[1]),
             'end': int(cache_mention[2]),
@@ -56,10 +54,15 @@ def _parse_document(lines):
             'id': cache_mention[5]}
         if cache_dict['start'] < abstract_offset:
             title_mentions.append(cache_dict)
+            text = title
         else:
             cache_dict['start'] -= abstract_offset
             cache_dict['end'] -= abstract_offset
             abstract_mentions.append(cache_dict)
+            text = abstract
+        # Sanity check (quotes inside mentions were removed in the table).
+        cache_dict['text'] = text[cache_dict['start']:cache_dict['end']]
+        assert cache_dict['text'].replace('"', ' ') == cache_mention[3]
     sections = [
         {
             'text': title,
