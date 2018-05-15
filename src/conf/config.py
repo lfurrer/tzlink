@@ -17,7 +17,16 @@ HERE = os.path.dirname(__file__)
 DEFAULTS = os.path.join(HERE, 'defaults.cfg')
 
 
-class Config:
+class _Namespace:
+    '''A plain object with subscript access to its __dict__.'''
+    def __getitem__(self, name):
+        return getattr(self, name)
+
+    def __setitem__(self, name, value):
+        setattr(self, name, value)
+
+
+class Config(_Namespace):
     '''
     Gobally usable class for accessing config parameters.
 
@@ -25,6 +34,9 @@ class Config:
         >>> cfg = Config()
         >>> cfg.rank.n_kernels
         50
+    If the parameter name is determined at runtime, use subscript:
+        >>> cfg[dataset].train_fn
+        'path/to/training.txt'
     '''
 
     # Default values determined at runtime.
@@ -47,10 +59,10 @@ class Config:
             if sec_name == 'DEFAULT':
                 continue
             section = _Namespace()
-            setattr(self, sec_name, section)
+            self[sec_name] = section
             for param in sec_proxy:
                 value = self._guess_type(sec_proxy, param)
-                setattr(section, param, value)
+                section[param] = value
 
     @classmethod
     def _guess_type(cls, section, param):
@@ -63,8 +75,3 @@ class Config:
             except ValueError:
                 pass
         return section.get(param)
-
-
-class _Namespace:
-    '''A plain object with a __dict__ attribute.'''
-    pass
