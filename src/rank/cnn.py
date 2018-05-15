@@ -10,7 +10,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Flatten, Concatenate, Dot
 from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
 
-from gensim.models.keyedvectors import KeyedVectors
+from ..preprocessing import word_embeddings as wemb
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
 
 
 def _run(conf):
-    emb_lookup, emb_matrix = _load_embeddings(conf)
+    emb_lookup, emb_matrix = wemb.load(conf)
     model = _create_model(conf, emb_matrix)
 
 
@@ -43,12 +43,6 @@ def _create_model(conf, embeddings=None):
     model = Model(inputs=(inp_q, inp_a), outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
-
-
-def _load_embeddings(conf):
-    wv = KeyedVectors.load_word2vec_format(conf.rank.embedding_fn)
-    lookup = {w: i for i, w in enumerate(wv.index2word)}
-    return lookup, wv.syn0
 
 
 def _embedding_layer(conf, matrix=None):
