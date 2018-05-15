@@ -52,7 +52,7 @@ def _parse_MEDIC_terminology(file):
         yield Entry(
             name,
             id_,
-            tuple(alt.split('|')),
+            tuple(alt.split('|')) if alt else (),
             def_,
-            tuple(syn.split('|')),
+            tuple(syn.split('|')) if syn else (),
         )
