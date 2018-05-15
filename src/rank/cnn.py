@@ -24,8 +24,15 @@ def main():
     args = ap.parse_args()
 
 
-def _run(conf):
+def _run(conf, mode='train', **kwargs):
     emb_lookup, emb_matrix = wemb.load(conf)
+    if mode == 'train':
+        _train(conf, emb_lookup, emb_matrix, **kwargs)
+    else:
+        raise NotImplementedError
+
+
+def _train(conf, emb_lookup, emb_matrix, **kwargs):
     model = _create_model(conf, emb_matrix)
 
 
