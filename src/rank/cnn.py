@@ -41,6 +41,7 @@ def _create_model(conf, embeddings=None):
     logistic_regression = Dense(units=2, activation='softmax')(hidden_layer)
 
     model = Model(inputs=(inp_q, inp_a), outputs=logistic_regression)
+    model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
 
 
