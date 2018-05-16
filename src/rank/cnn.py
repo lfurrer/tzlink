@@ -10,7 +10,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Flatten, Concatenate, Dot
 from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
 
-from ..preprocessing import word_embeddings as wemb
+from ..preprocessing import word_embeddings as wemb, vectorize
 
 
 def main():
@@ -27,13 +27,14 @@ def main():
 def _run(conf, mode='train', **kwargs):
     emb_lookup, emb_matrix = wemb.load(conf)
     if mode == 'train':
-        _train(conf, emb_lookup, emb_matrix, **kwargs)
+        _train(conf, emb_lookup, emb_matrix, subset='train', **kwargs)
     else:
         raise NotImplementedError
 
 
 def _train(conf, emb_lookup, emb_matrix, **kwargs):
     model = _create_model(conf, emb_matrix)
+    x_q, x_a, y = vectorize.load(conf, emb_lookup, **kwargs)
 
 
 def _create_model(conf, embeddings=None):
