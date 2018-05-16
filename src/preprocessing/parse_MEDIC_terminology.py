@@ -10,19 +10,19 @@ Parse the MEDIC terminology used for the NCBI disease corpus.
 
 
 import csv
-from collections import namedtuple
+
+from .terminology import DictEntry
 
 
-# Individual terminology entry.
-Entry = namedtuple('DictEntry', 'name id alt def_ syn')
-
-
-def parse_MEDIC_terminology(filename):
+def parse_MEDIC_terminology(source):
     '''
-    Parse the MEDIC TSV into a list of namedtuples.
+    Parse the MEDIC TSV into an iterator of namedtuples.
     '''
-    with open(filename, encoding='utf-8') as f:
-        return list(_parse_MEDIC_terminology(f))
+    if hasattr(source, 'read'):
+        yield from _parse_MEDIC_terminology(source)
+    else:
+        with open(source, encoding='utf-8') as f:
+            yield from _parse_MEDIC_terminology(f)
 
 
 def _parse_MEDIC_terminology(file):
@@ -49,7 +49,7 @@ def _parse_MEDIC_terminology(file):
         if row[0].startswith('#'):
             continue
         name, id_, alt, def_, _, _, _, syn = row
-        yield Entry(
+        yield DictEntry(
             name,
             id_,
             tuple(alt.split('|')) if alt else (),
