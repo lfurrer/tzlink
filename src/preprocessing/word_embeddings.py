@@ -16,6 +16,6 @@ def load(conf):
     '''
     Load embeddings from binary and create a lookup table.
     '''
-    wv = KeyedVectors.load_word2vec_format(conf.rank.embedding_fn)
+    wv = KeyedVectors.load_word2vec_format(conf.rank.embedding_fn, binary=True)
     lookup = {w: i for i, w in enumerate(wv.index2word)}
     return lookup, wv.syn0
