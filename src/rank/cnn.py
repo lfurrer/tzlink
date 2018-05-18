@@ -7,7 +7,7 @@
 import argparse
 
 from keras.models import Model
-from keras.layers import Input, Dense, Flatten, Concatenate, Dot
+from keras.layers import Input, Dense, Concatenate, Dot
 from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
 
 from ..preprocessing import word_embeddings as wemb, vectorize
@@ -35,6 +35,9 @@ def _run(conf, mode='train', **kwargs):
 def _train(conf, emb_lookup, emb_matrix, **kwargs):
     model = _create_model(conf, emb_matrix)
     x_q, x_a, y = vectorize.load(conf, emb_lookup, **kwargs)
+    model.fit([x_q, x_a], y, epochs=conf.rank.epochs,
+              batch_size=conf.rank.batch_size)
+    return model
 
 
 def _create_model(conf, embeddings=None):
@@ -42,7 +45,7 @@ def _create_model(conf, embeddings=None):
     emb = _embedding_layer(conf, embeddings)
     sem_q = _semantic_layers(conf, emb(inp_q))
     sem_a = _semantic_layers(conf, emb(inp_a))
-    v_sem = Dot(-1)(sem_q, sem_a)
+    v_sem = Dot(-1)([sem_q, sem_a])
     join_layer = Concatenate()([sem_q, v_sem, sem_a])
     hidden_layer = Dense(units=1+2*conf.rank.n_kernels,
                          activation=conf.rank.activation)(join_layer)
@@ -74,7 +77,6 @@ def _semantic_layers(conf, x):
                activation=conf.rank.activation,
               )(x)
     x = GlobalMaxPooling1D()(x)
-    x = Flatten()(x)
     return x
 
 
