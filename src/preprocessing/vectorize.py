@@ -9,18 +9,18 @@ from string import punctuation
 import numpy as np
 
 from .load import load_data
-from ..rank.generate_candidates import CandidateGenerator
+from ..candidates.generate_candidates import candidate_generator
 
 
 def load(conf, voc_index, dataset, subset):
     corpus = load_data(conf, dataset, subset)
     dict_entries = load_data(conf, dataset, 'dict')
-    cand_gen = CandidateGenerator(dict_entries)
+    cand_gen = candidate_generator(conf, dict_entries)
     vec = Vectorizer(conf, voc_index)
     q, a, labels = [], [], []
     for mention, ref_ids in _itermentions(corpus):
         vec_q = vec.vectorize(mention)
-        for candidate, label in cand_gen.candidates(mention, ref_ids):
+        for candidate, label in cand_gen.samples(mention, ref_ids):
             vec_a = vec.vectorize(candidate)
             q.append(vec_q)
             a.append(vec_a)
