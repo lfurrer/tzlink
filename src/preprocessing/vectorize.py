@@ -24,7 +24,7 @@ def load(conf, voc_index, dataset, subset):
             vec_a = vec.vectorize(candidate)
             q.append(vec_q)
             a.append(vec_a)
-            labels.append((float(label), float(not label)))  # 1-hot binary
+            labels.append((float(label),))
     return np.array(q), np.array(a), np.array(labels)
 
 

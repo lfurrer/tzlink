@@ -46,7 +46,7 @@ def _create_model(conf, embeddings=None):
     join_layer = Concatenate()([sem_q, v_sem, sem_a])
     hidden_layer = Dense(units=1+2*conf.rank.n_kernels,
                          activation=conf.rank.activation)(join_layer)
-    logistic_regression = Dense(units=2, activation='softmax')(hidden_layer)
+    logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
     model = Model(inputs=(inp_q, inp_a), outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
