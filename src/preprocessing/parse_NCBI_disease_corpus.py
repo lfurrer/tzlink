@@ -49,7 +49,7 @@ def _parse_document(lines):
             'end': int(cache_mention[2]),
             'text': cache_mention[3],
             'type': cache_mention[4],
-            'id': cache_mention[5]}
+            'id': _parse_ids(cache_mention[5])}
         if cache_dict['start'] < abstract_offset:
             title_mentions.append(cache_dict)
             text = title
@@ -75,3 +75,23 @@ def _parse_document(lines):
     ]
     doc = {'docid': docid, 'sections': sections}
     return doc
+
+
+def _parse_ids(ids):
+    '''
+    Divide into alternative and component IDs.
+
+    Alternatives are separated by "|".
+    The components of compound concepts are separated by "+".
+
+    Also, the "MESH:" prefix is missing most of the time.
+
+    Return a tuple of components, each of which is a
+    frozenset of alternatives.
+    '''
+    return tuple(
+        frozenset(
+            alt if alt.startswith(('MESH', 'OMIM')) else 'MESH:'+alt
+            for alt in component.split('|')
+        ) for component in ids.strip().split('+')
+    )
