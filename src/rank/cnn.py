@@ -20,16 +20,33 @@ def main():
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    ap.add_argument()
+    ap.add_argument(
+        '-t', '--train', action='store_true',
+        help='train a new CNN ranking model '
+             '(instead of loading a previously trained one)')
+    ap.add_argument(
+        '-p', '--predict', action='store_true',
+        help='use the model to produce rankings')
+    ap.add_argument(
+        '-m', '--model', metavar='PATH',
+        help='path for dumping and loading a trained model')
+    ap.add_argument(
+        '-d', '--dataset', required=True,
+        help='which dataset to use')
     args = ap.parse_args()
+    _run(**vars(args))
 
 
-def _run(conf, mode='train', **kwargs):
+def _run(conf, train=True, predict=True, dumpfn=None, **kwargs):
     emb_lookup, emb_matrix = wemb.load(conf)
-    if mode == 'train':
-        _train(conf, emb_lookup, emb_matrix, subset='train', **kwargs)
+    if train:
+        model = _train(conf, emb_lookup, emb_matrix, subset='train', **kwargs)
+        if dumpfn is not None:
+            _dump(model, dumpfn)
     else:
-        raise NotImplementedError
+        model = _load(conf, dumpfn)
+    if predict:
+        _predict(conf, model)
 
 
 def _train(conf, emb_lookup, emb_matrix, **kwargs):
@@ -38,6 +55,18 @@ def _train(conf, emb_lookup, emb_matrix, **kwargs):
     model.fit([x_q, x_a], y, epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     return model
+
+
+def _dump(model, fn):
+    pass
+
+
+def _load(conf, fn):
+    pass
+
+
+def _predict(conf, model):
+    pass
 
 
 def _create_model(conf, embeddings=None):
