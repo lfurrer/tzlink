@@ -10,6 +10,7 @@ Convert text to integer vectors.
 
 
 import logging
+import multiprocessing as mp
 from string import punctuation
 
 import numpy as np
@@ -38,15 +39,44 @@ def load(conf, voc_index, dataset, subset):
     cand_gen = candidate_generator(conf, dict_entries)
     logging.info('loading vectorizer...')
     vec = Vectorizer(conf, voc_index)
+    q_vecs, a_vecs, labels = [], [], []
+    logging.info('distributing load to %d workers...', conf.candidates.workers)
+    with mp.Pool(conf.candidates.workers,
+                 initializer=_set_global_instances,
+                 initargs=[cand_gen, vec]) as p:
+        for q, a, l in p.imap_unordered(_worker_task, _itermentions(corpus)):
+            q_vecs.extend(q)
+            a_vecs.extend(a)
+            labels.extend(l)
+    logging.info('converting lists to 2D numpy arrays...')
+    q, a, l = np.array(q_vecs), np.array(a_vecs), np.array(labels)
+    logging.info('done loading')
+    return q, a, l
+
+
+# Global variables are necessary to allow Pool workers re-using the same
+# instances across all tasks.
+# https://stackoverflow.com/a/10118250
+CAND_GEN = None
+VECTORIZER = None
+
+def _set_global_instances(cand_gen, vectorizer):
+    global CAND_GEN
+    global VECTORIZER
+    CAND_GEN = cand_gen
+    VECTORIZER = vectorizer
+
+
+def _worker_task(item):
+    mention, ref_ids = item
     q, a, labels = [], [], []
-    for mention, ref_ids in _itermentions(corpus):
-        vec_q = vec.vectorize(mention)
-        for candidate, label in cand_gen.samples(mention, ref_ids):
-            vec_a = vec.vectorize(candidate)
-            q.append(vec_q)
-            a.append(vec_a)
-            labels.append((float(label),))
-    return np.array(q), np.array(a), np.array(labels)
+    vec_q = VECTORIZER.vectorize(mention)
+    for candidate, label in CAND_GEN.samples(mention, ref_ids):
+        vec_a = VECTORIZER.vectorize(candidate)
+        q.append(vec_q)
+        a.append(vec_a)
+        labels.append((float(label),))
+    return q, a, labels
 
 
 def _itermentions(corpus):
