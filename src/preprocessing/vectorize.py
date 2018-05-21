@@ -4,6 +4,12 @@
 # Author: Lenz Furrer, 2018
 
 
+'''
+Convert text to integer vectors.
+'''
+
+
+import logging
 from string import punctuation
 
 import numpy as np
@@ -13,9 +19,24 @@ from ..candidates.generate_candidates import candidate_generator
 
 
 def load(conf, voc_index, dataset, subset):
+    '''
+    Create vectorized samples with labels.
+
+    Args:
+        conf: a config.Config instance
+        voc_index (dict): mapping of words to integers
+        dataset (str): dataset identifier
+        subset (str): train, dev, or test
+
+    Returns:
+        triple of np.array (2D): vocabulary vectors of
+            question and answer side, and the labels
+    '''
     corpus = load_data(conf, dataset, subset)
     dict_entries = load_data(conf, dataset, 'dict')
+    logging.info('loading candidate generator...')
     cand_gen = candidate_generator(conf, dict_entries)
+    logging.info('loading vectorizer...')
     vec = Vectorizer(conf, voc_index)
     q, a, labels = [], [], []
     for mention, ref_ids in _itermentions(corpus):
@@ -47,10 +68,10 @@ class Vectorizer:
     def __init__(self, conf, vocab):
         self.vocab = vocab
         self.length = conf.rank.sample_size  # max number of tokens per vector
-        if conf.general.vectorizer_cache:
+        if conf.general.vectorizer_cache:  # trade speed for memory?
             self._cache = {}
         else:
-            self.vectorize = self._vectorize
+            self.vectorize = self._vectorize  # hide the cache wrapper method
 
     def vectorize(self, text):
         '''
