@@ -23,6 +23,10 @@ class Vectorizer:
     Converter text -> vector.
     '''
 
+    # Reserved rows in the embedding matrix.
+    PAD = 0  # all zeros for padding
+    UNK = 1  # random values for "the unknown word"
+
     def __init__(self, conf, vocab):
         self.vocab = vocab
         self.length = conf.rank.sample_size  # max number of tokens per vector
@@ -45,7 +49,7 @@ class Vectorizer:
         vector = list(self._lookup(_tokenize(text)))
         # Pad or truncate the vector to the required size.
         if len(vector) < self.length:
-            vector.extend(0 for _ in range(len(vector), self.length))
+            vector.extend(self.PAD for _ in range(len(vector), self.length))
         elif len(vector) > self.length:
             vector[self.length:] = []
         return np.array(vector)
@@ -58,7 +62,9 @@ class Vectorizer:
                 except KeyError:
                     continue
                 break
-            # Skip tokens that cannot be found.
+            else:
+                # Handle tokens that couldn't be found.
+                yield self.UNK
 
     @staticmethod
     def _lookup_variants(token):
