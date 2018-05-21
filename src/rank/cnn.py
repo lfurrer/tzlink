@@ -10,7 +10,7 @@ from keras.models import Model
 from keras.layers import Input, Dense, Concatenate, Dot
 from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
 
-from ..preprocessing import word_embeddings as wemb, vectorize
+from ..preprocessing import word_embeddings as wemb, samples
 
 
 def main():
@@ -51,7 +51,7 @@ def _run(conf, train=True, predict=True, dumpfn=None, **kwargs):
 
 def _train(conf, emb_lookup, emb_matrix, **kwargs):
     model = _create_model(conf, emb_matrix)
-    x_q, x_a, y = vectorize.load(conf, emb_lookup, **kwargs)
+    x_q, x_a, y = samples.samples(conf, emb_lookup, **kwargs)
     model.fit([x_q, x_a], y, epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     return model

@@ -31,3 +31,13 @@ def load_data(conf, dataset, subset):
     loader = dict_loader if subset == 'dict' else corpus_loader
     fn = conf[dataset]['{}_fn'.format(subset)]
     return loader[dataset](fn)
+
+
+def itermentions(corpus):
+    '''
+    Iterate over pairs <text, IDs>.
+    '''
+    for doc in corpus:
+        for sec in doc['sections']:
+            for mention in sec['mentions']:
+                yield mention['text'], mention['id']
