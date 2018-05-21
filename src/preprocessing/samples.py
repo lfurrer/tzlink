@@ -19,7 +19,7 @@ from .vectorize import Vectorizer
 from ..candidates.generate_candidates import candidate_generator
 
 
-def samples(conf, voc_index, dataset, subset):
+def samples(conf, voc_index, dataset, subset, oracle=False):
     '''
     Create vectorized samples with labels.
 
@@ -43,7 +43,7 @@ def samples(conf, voc_index, dataset, subset):
     logging.info('distributing load to %d workers...', conf.candidates.workers)
     with mp.Pool(conf.candidates.workers,
                  initializer=_set_global_instances,
-                 initargs=[cand_gen, vec]) as p:
+                 initargs=[cand_gen, vec, oracle]) as p:
         for q, a, l in p.imap_unordered(_worker_task, itermentions(corpus)):
             q_vecs.extend(q)
             a_vecs.extend(a)
@@ -59,19 +59,22 @@ def samples(conf, voc_index, dataset, subset):
 # https://stackoverflow.com/a/10118250
 CAND_GEN = None
 VECTORIZER = None
+ORACLE = None
 
-def _set_global_instances(cand_gen, vectorizer):
+def _set_global_instances(cand_gen, vectorizer, oracle):
     global CAND_GEN
     global VECTORIZER
+    global ORACLE
     CAND_GEN = cand_gen
     VECTORIZER = vectorizer
+    ORACLE = oracle
 
 
 def _worker_task(item):
     mention, ref_ids = item
     q, a, labels = [], [], []
     vec_q = VECTORIZER.vectorize(mention)
-    for candidate, label in CAND_GEN.samples(mention, ref_ids):
+    for candidate, label in CAND_GEN.samples(mention, ref_ids, ORACLE):
         vec_a = VECTORIZER.vectorize(candidate)
         q.append(vec_q)
         a.append(vec_a)

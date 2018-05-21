@@ -64,7 +64,7 @@ class _BaseCandidateGenerator:
         '''
         return text.lower()
 
-    def samples(self, mention, ref_ids):
+    def samples(self, mention, ref_ids, oracle=False):
         '''
         Iterate over pairs <candidate, label>.
 
@@ -73,9 +73,17 @@ class _BaseCandidateGenerator:
         samples, respectively.
 
         Each synonym generates a separate positive sample.
+
+        If oracle is True, positive samples are generated
+        also for names that weren't found through the
+        candidate retrieval mechanism.
         '''
+        candidates = self.candidates(mention)
         positive = self._positive_samples(ref_ids)
-        negative = self.candidates(mention).difference(positive)
+        negative = candidates.difference(positive)
+        if not oracle:
+            positive = candidates.intersection(positive)
+
         for subset, label in ((positive, True), (negative, False)):
             for cand in subset:
                 yield cand, label
