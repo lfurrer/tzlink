@@ -7,8 +7,9 @@
 import argparse
 
 from keras.models import Model
-from keras.layers import Input, Dense, Concatenate, Dot
+from keras.layers import Input, Dense, Concatenate, Layer
 from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
+from keras import backend as K
 
 from ..preprocessing import word_embeddings as wemb, samples
 
@@ -74,7 +75,7 @@ def _create_model(conf, embeddings=None):
     emb = _embedding_layer(conf, embeddings)
     sem_q = _semantic_layers(conf, emb(inp_q))
     sem_a = _semantic_layers(conf, emb(inp_a))
-    v_sem = Dot(-1)([sem_q, sem_a])
+    v_sem = PairwiseSimilarity()([sem_q, sem_a])
     join_layer = Concatenate()([sem_q, v_sem, sem_a])
     hidden_layer = Dense(units=1+2*conf.rank.n_kernels,
                          activation=conf.rank.activation)(join_layer)
@@ -107,6 +108,38 @@ def _semantic_layers(conf, x):
               )(x)
     x = GlobalMaxPooling1D()(x)
     return x
+
+
+class PairwiseSimilarity(Layer):
+    '''
+    Join layer with a trainable similarity matrix.
+
+    v_sem = sim(v_q, v_a) = v_q^T M v_a
+    '''
+
+    def __init__(self, **kwargs):
+        self.M = None  # set in self.build()
+        super().__init__(**kwargs)
+
+    def build(self, input_shape):
+        try:
+            shape_q, shape_a = input_shape
+        except ValueError:
+            raise ValueError('input_shape must be a 2-element list')
+        self.M = self.add_weight(name='M',
+                                 shape=(shape_q[1], shape_a[1]),
+                                 initializer='uniform',
+                                 trainable=True)
+        super().build(input_shape)
+
+    def call(self, inputs):
+        q, a = inputs
+        # https://github.com/wglassly/cnnormaliztion/blob/master/src/nn_layers.py#L822
+        return K.batch_dot(q, K.dot(a, K.transpose(self.M)), axes=1)
+
+    @staticmethod
+    def compute_output_shape(input_shape):
+        return (input_shape[0][0], 1)
 
 
 if __name__ == '__main__':
