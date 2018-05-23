@@ -34,21 +34,20 @@ def candidate_generator(conf, dict_entries):
 
 class _BaseCandidateGenerator:
     def __init__(self, dict_entries):
-        self._inverse_index = {}
+        self._index = {}  # maps names to entries
+        self._inverse_index = {}  # maps IDs to names
         self._load_dict(dict_entries)
 
     def _load_dict(self, dict_entries):
         for entry in dict_entries:
             names = set(self._normalize(n) for n in (entry.name,) + entry.syn)
             ids = (entry.id,) + entry.alt
-            self._add_entry(names, ids, entry)
+            self._add_entry(names, entry)
             self._add_entry_inverse(names, ids)
 
-    def _add_entry(self, names, ids, entry):
-        '''
-        Subclass hook to index an entry for candidate retrieval.
-        '''
-        raise NotImplementedError
+    def _add_entry(self, names, entry):
+        for name in names:
+            self._index.setdefault(name, set()).add(entry)
 
     def _add_entry_inverse(self, names, ids):
         for id_ in ids:
@@ -63,6 +62,24 @@ class _BaseCandidateGenerator:
         self.candidates() and self.samples().
         '''
         return text.lower()
+
+    def entries(self, name, normalized=True):
+        '''
+        Get all dict entries associated with this name.
+
+        If the name was obtained from self.candidate() or
+        self.samples(), it is already normalized. Otherwise
+        set `normalized=False`.
+        '''
+        if not normalized:
+            name = self._normalize(name)
+        return self._index[name]
+
+    def ids(self, name, normalized=True):
+        '''
+        Get all standard IDs associated with this name.
+        '''
+        return set(e.id for e in self.entries(name, normalized))
 
     def samples(self, mention, ref_ids, oracle=False):
         '''
@@ -118,15 +135,16 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
     def __init__(self, dict_entries, size=20, sgrams=((2, 1), (3, 1))):
         self.size = size
         self.shapes = sgrams  # <n, k>
-        self._index = defaultdict(Counter)
+        self._sgram_index = defaultdict(Counter)
         super().__init__(dict_entries)
         # Freeze the s-gram index.
-        self._index = dict(self._index)
+        self._sgram_index = dict(self._sgram_index)
 
-    def _add_entry(self, names, ids, entry):
+    def _add_entry(self, names, entry):
+        super()._add_entry(names, entry)
         for name in names:
             for sgram in self._preprocess(name):
-                self._index[sgram][name] += 1
+                self._sgram_index[sgram][name] += 1
 
     @staticmethod
     def _normalize(text):
@@ -147,7 +165,7 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
         # Compute the absolute overlap of skip-grams.
         candidates = Counter()
         for sgram, m_count in Counter(self._preprocess(mention)).items():
-            for cand, c_count in self._index.get(sgram, _D).items():
+            for cand, c_count in self._sgram_index.get(sgram, _D).items():
                 candidates[cand] += min(m_count, c_count)
         # When sorting the candidates, resolve ties by preferring shorter names.
         for cand, count in candidates.items():
