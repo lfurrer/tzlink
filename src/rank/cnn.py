@@ -18,6 +18,7 @@ from keras import backend as K
 
 from ..conf.config import Config
 from ..preprocessing import word_embeddings as wemb, samples
+from .predictions import handle_predictions
 
 
 def main():
@@ -56,7 +57,7 @@ def run(config, **kwargs):
     _run(config, **kwargs)
 
 
-def _run(conf, train=True, predict=True, dumpfn=None, **kwargs):
+def _run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
     emb_lookup, emb_matrix = wemb.load(conf)
     if train:
         model = _train(conf, emb_lookup, emb_matrix, subset='train', **kwargs)
@@ -64,13 +65,14 @@ def _run(conf, train=True, predict=True, dumpfn=None, **kwargs):
             _dump(model, dumpfn)
     else:
         model = _load(dumpfn)
-    if predict:
-        _predict(conf, model)
+    if predict or test:
+        data = _predict(conf, emb_lookup, model, subset='dev', **kwargs)
+        handle_predictions(conf, predict, test, *data)
 
 
 def _train(conf, emb_lookup, emb_matrix, **kwargs):
     model = _create_model(conf, emb_matrix)
-    x_q, x_a, y = samples.samples(conf, emb_lookup, **kwargs)
+    x_q, x_a, y = samples.training_samples(conf, emb_lookup, **kwargs)
     model.fit([x_q, x_a], y, epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     return model
@@ -87,8 +89,11 @@ def _load(fn):
     return model
 
 
-def _predict(conf, model):
-    pass
+def _predict(conf, emb_lookup, model, **kwargs):
+    vecs, ids, occs = samples.prediction_samples(conf, emb_lookup, **kwargs)
+    x_q, x_a, _ = vecs
+    y_pred = model.predict([x_q, x_a], batch_size=conf.rank.batch_size)
+    return occs, y_pred, ids
 
 
 def _create_model(conf, embeddings=None):

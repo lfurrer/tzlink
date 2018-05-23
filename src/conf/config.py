@@ -10,6 +10,7 @@ Configuration handling.
 
 
 import os
+import time
 import logging
 import configparser as cp
 
@@ -43,6 +44,7 @@ class Config(_Namespace):
     # Default values determined at runtime.
     DYNAMIC_DEFAULTS = {
         'rootpath': os.path.realpath(os.path.join(HERE, '..', '..')),
+        'timestamp': time.strftime('%Y%m%d-%H%M%S'),
     }
 
     def __init__(self, *filenames):
