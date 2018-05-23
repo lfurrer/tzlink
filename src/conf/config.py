@@ -10,6 +10,7 @@ Configuration handling.
 
 
 import os
+import logging
 import configparser as cp
 
 
@@ -53,6 +54,7 @@ class Config(_Namespace):
                                  empty_lines_in_values=False)
         parser.read([DEFAULTS, *filenames])
         self._store(parser.items())
+        self._setup_logging()
 
     def _store(self, items):
         for sec_name, sec_proxy in items:
@@ -75,3 +77,7 @@ class Config(_Namespace):
             except ValueError:
                 pass
         return section.get(param)
+
+    def _setup_logging(self):
+        logging.basicConfig(**{p: self['logging'][p]
+                               for p in ('format', 'level')})
