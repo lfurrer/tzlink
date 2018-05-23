@@ -4,13 +4,19 @@
 # Author: Lenz Furrer, 2018
 
 
+'''
+Convolutional Neural Network for ranking mention-candidate pairs.
+'''
+
+
 import argparse
 
-from keras.models import Model
+from keras.models import Model, load_model
 from keras.layers import Input, Dense, Concatenate, Layer
 from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
 from keras import backend as K
 
+from ..conf.config import Config
 from ..preprocessing import word_embeddings as wemb, samples
 
 
@@ -18,9 +24,7 @@ def main():
     '''
     Run as script.
     '''
-    ap = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
         '-t', '--train', action='store_true',
         help='train a new CNN ranking model '
@@ -29,13 +33,27 @@ def main():
         '-p', '--predict', action='store_true',
         help='use the model to produce rankings')
     ap.add_argument(
-        '-m', '--model', metavar='PATH',
+        '-m', '--model', metavar='PATH', dest='dumpfn',
         help='path for dumping and loading a trained model')
+    ap.add_argument(
+        '-c', '--config', metavar='PATH', nargs='+', default=(),
+        help='config file(s) for overriding the defaults')
     ap.add_argument(
         '-d', '--dataset', required=True,
         help='which dataset to use')
     args = ap.parse_args()
-    _run(**vars(args))
+    run(**vars(args))
+
+
+def run(config, **kwargs):
+    '''
+    Run the CNN (incl. preprocessing).
+    '''
+    if not isinstance(config, Config):
+        if isinstance(config, str):
+            config = [config]
+        config = Config(*config)
+    _run(config, **kwargs)
 
 
 def _run(conf, train=True, predict=True, dumpfn=None, **kwargs):
@@ -45,7 +63,7 @@ def _run(conf, train=True, predict=True, dumpfn=None, **kwargs):
         if dumpfn is not None:
             _dump(model, dumpfn)
     else:
-        model = _load(conf, dumpfn)
+        model = _load(dumpfn)
     if predict:
         _predict(conf, model)
 
@@ -59,11 +77,14 @@ def _train(conf, emb_lookup, emb_matrix, **kwargs):
 
 
 def _dump(model, fn):
-    pass
+    model.save(fn)
 
 
-def _load(conf, fn):
-    pass
+def _load(fn):
+    model = load_model(fn, custom_objects={
+        'PairwiseSimilarity': PairwiseSimilarity,
+    })
+    return model
 
 
 def _predict(conf, model):
