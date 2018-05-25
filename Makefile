@@ -3,6 +3,10 @@
 # Default target: initialise data/*
 init: embeddings ncbi-disease
 
+# Run target: train a model and evaluate it.
+run:
+	python3 -m src.rank -d ncbi-disease -t -p
+
 
 # Intermediate targets: specific paths.
 embeddings: data/wvec_50_haodi-li-et-al.bin
