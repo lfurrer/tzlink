@@ -30,7 +30,7 @@ def handle_predictions(conf, dump, evaluate, *args):
 
 
 def _itermentions(conf, occs, scores, id_index):
-    for *annotation, start, end in occs:
+    for *annotation, refs, start, end in occs:
         if start != end:
             i = max(range(start, end), key=scores.__getitem__)
             score = scores[i]
@@ -39,7 +39,9 @@ def _itermentions(conf, occs, scores, id_index):
             score = None
             ids = []
         id_ = _disambiguate(conf, ids, score)
-        yield (*annotation, id_, len(ids))
+        reachable = len(refs) == 1 and any(id_index[i].intersection(refs[0])
+                                           for i in range(start, end))
+        yield (*annotation, refs, id_, len(ids), reachable)
 
 
 def _disambiguate(conf, ids, score):
@@ -60,6 +62,7 @@ class TSVWriter:
         reference ID(s)
         predicted ID
         number of IDs for the top-ranked candidate name
+        reachable (reference ID is among the candidates)
     '''
     def __init__(self, conf, enabled):
         if enabled:
@@ -93,9 +96,10 @@ class Evaluator:
     def __init__(self, enabled):
         self.correct = 0
         self.total = 0
+        self.unreachable = 0
         self.ambiguous = 0
         self.compound = 0
-        self.unreachable = 0
+        self.nocandidates = 0
 
         if enabled:
             self.update = self._update
@@ -111,19 +115,21 @@ class Evaluator:
         return self.correct/self.total
 
     def _update(self, entry):
-        *_, refs, id_, n_ids = entry
+        *_, refs, id_, n_ids, reachable = entry
         self.total += 1
+        self.unreachable += not reachable
         if len(refs) > 1:
             # No chance to get these right.
             self.compound += 1
         elif id_ in refs[0]:
             self.correct += 1
         if n_ids == 0:
-            self.unreachable += 1
+            self.nocandidates += 1
         elif n_ids > 1:
             self.ambiguous += 1
 
     def _summary(self):
-        labels = 'accuracy correct total ambiguous compound unreachable'
-        for label in labels.split():
-            print('{:11} {:5}'.format(label, getattr(self, label)))
+        labels = '''accuracy correct total
+                    unreachable ambiguous compound nocandidates'''.split()
+        for label in labels:
+            print('{:12} {:5}'.format(label, getattr(self, label)))
