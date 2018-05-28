@@ -15,7 +15,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from .load import load_data
+from .load import load_data, load_dict
 from .vectorize import Vectorizer
 from ..candidates.generate_candidates import candidate_generator
 
@@ -66,11 +66,12 @@ def prediction_samples(conf, voc_index, dataset, subset, oracle=False):
 
 
 def _itercandidates(conf, voc_index, dataset, subset, oracle):
+    logging.info('loading corpus and terminology...')
     corpus = load_data(conf, dataset, subset)
-    mentions = _deduplicated(corpus)
-    dict_entries = load_data(conf, dataset, 'dict')
+    terminology = load_dict(conf, dataset)
+    mentions = _deduplicated(corpus, terminology)
     logging.info('loading candidate generator...')
-    cand_gen = candidate_generator(conf, dict_entries)
+    cand_gen = candidate_generator(conf, terminology)
     logging.info('loading vectorizer...')
     vec = Vectorizer(conf, voc_index)
     logging.info('distributing load to %d workers...', conf.candidates.workers)
@@ -98,17 +99,25 @@ def _samples(conf, *args):
     return (x_q, x_a, y), cand_ids, occurrences
 
 
-def _deduplicated(corpus):
+def _deduplicated(corpus, terminology):
     mentions = defaultdict(list)
     for doc in corpus:
         docid = doc['docid']
         for sec in doc['sections']:
             offset = sec['offset']
             for mention in sec['mentions']:
-                key = mention['text'], mention['id']
+                key = mention['text'], _canonical_ids(mention['id'], terminology)
                 occ = docid, offset + mention['start'], offset + mention['end']
                 mentions[key].append(occ)
     return mentions
+
+
+def _canonical_ids(ids, terminology):
+    canonical = tuple(
+        frozenset().union(*(terminology.canonical_ids(alt) for alt in comp))
+        for comp in ids
+    )
+    return canonical
 
 
 # Global variables are necessary to allow Pool workers to re-use the same
@@ -136,5 +145,5 @@ def _worker_task(item):
         q.append(vec_q)
         a.append(vec_a)
         labels.append((float(label),))
-        cand_ids.append(CAND_GEN.ids(candidate))
+        cand_ids.append(CAND_GEN.terminology.ids([candidate]))
     return q, a, labels, cand_ids

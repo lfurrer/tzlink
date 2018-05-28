@@ -15,7 +15,7 @@ import itertools as it
 from collections import defaultdict, Counter
 
 
-def candidate_generator(conf, dict_entries):
+def candidate_generator(conf, terminology):
     '''
     Select and instantiate a candidate generator.
     '''
@@ -29,57 +29,12 @@ def candidate_generator(conf, dict_entries):
     if args:
         args = ast.literal_eval(args)
 
-    return cls(dict_entries, *args)
+    return cls(terminology, *args)
 
 
 class _BaseCandidateGenerator:
-    def __init__(self, dict_entries):
-        self._index = {}  # maps names to entries
-        self._inverse_index = {}  # maps IDs to names
-        self._load_dict(dict_entries)
-
-    def _load_dict(self, dict_entries):
-        for entry in dict_entries:
-            names = set(self._normalize(n) for n in (entry.name,) + entry.syn)
-            ids = (entry.id,) + entry.alt
-            self._add_entry(names, entry)
-            self._add_entry_inverse(names, ids)
-
-    def _add_entry(self, names, entry):
-        for name in names:
-            self._index.setdefault(name, set()).add(entry)
-
-    def _add_entry_inverse(self, names, ids):
-        for id_ in ids:
-            self._inverse_index.setdefault(id_, set()).update(names)
-
-    @staticmethod
-    def _normalize(text):
-        '''
-        Preprocessing for all dict_entries before indexing.
-
-        This method affects the strings returned by
-        self.candidates() and self.samples().
-        '''
-        return text.lower()
-
-    def entries(self, name, normalized=True):
-        '''
-        Get all dict entries associated with this name.
-
-        If the name was obtained from self.candidate() or
-        self.samples(), it is already normalized. Otherwise
-        set `normalized=False`.
-        '''
-        if not normalized:
-            name = self._normalize(name)
-        return self._index[name]
-
-    def ids(self, name, normalized=True):
-        '''
-        Get all standard IDs associated with this name.
-        '''
-        return set(e.id for e in self.entries(name, normalized))
+    def __init__(self, terminology):
+        self.terminology = terminology
 
     def samples(self, mention, ref_ids, oracle=False):
         '''
@@ -107,7 +62,7 @@ class _BaseCandidateGenerator:
 
     def _positive_samples(self, ref_ids):
         ids = self._select_ids(ref_ids)
-        positive = set().union(*(self._inverse_index.get(i, ()) for i in ids))
+        positive = self.terminology.names(ids)
         return positive
 
     def candidates(self, mention):
@@ -132,27 +87,19 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
     N best candidates based on absolute skip-gram overlap.
     '''
 
-    def __init__(self, dict_entries, size=20, sgrams=((2, 1), (3, 1))):
+    def __init__(self, terminology, size=20, sgrams=((2, 1), (3, 1))):
+        super().__init__(terminology)
         self.size = size
         self.shapes = sgrams  # <n, k>
-        self._sgram_index = defaultdict(Counter)
-        super().__init__(dict_entries)
-        # Freeze the s-gram index.
-        self._sgram_index = dict(self._sgram_index)
+        self._sgram_index = self._create_index()
 
-    def _add_entry(self, names, entry):
-        super()._add_entry(names, entry)
-        for name in names:
+    def _create_index(self):
+        index = defaultdict(Counter)
+        for name in self.terminology.iter_names():
             for sgram in self._preprocess(name):
-                self._sgram_index[sgram][name] += 1
-
-    @staticmethod
-    def _normalize(text):
-        return text  # normalize only during lookup
-
-    @staticmethod
-    def _lookup_normalize(text):
-        return text.lower()
+                index[sgram][name] += 1
+        # Freeze the s-gram index.
+        return dict(index)
 
     def candidates(self, mention):
         candidates = self.all_candidates(mention)
@@ -176,6 +123,10 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
         text = self._lookup_normalize(text)
         for n, k in self.shapes:
             yield from self._skipgrams(text, n, k)
+
+    @staticmethod
+    def _lookup_normalize(text):
+        return text.lower()
 
     @staticmethod
     def _skipgrams(text, n, k):

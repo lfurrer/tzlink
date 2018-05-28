@@ -9,6 +9,7 @@ Common loading utilities.
 '''
 
 
+from .terminology import Terminology
 from .parse_MEDIC_terminology import parse_MEDIC_terminology
 from .parse_NCBI_disease_corpus import parse_NCBI_disease_corpus
 
@@ -31,6 +32,13 @@ def load_data(conf, dataset, subset):
     loader = dict_loader if subset == 'dict' else corpus_loader
     fn = conf[dataset]['{}_fn'.format(subset)]
     return loader[dataset](fn)
+
+
+def load_dict(conf, dataset):
+    '''
+    Read a dict file into a Terminology instance.
+    '''
+    return Terminology(load_data(conf, dataset, 'dict'))
 
 
 def itermentions(corpus):
