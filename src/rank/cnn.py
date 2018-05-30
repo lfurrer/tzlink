@@ -60,21 +60,24 @@ def run(config, dataset, **kwargs):
 
 def _run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
     sampler = samples.Sampler(conf)
+    val_data = sampler.prediction_samples(**kwargs)
     if train:
-        model = _train(conf, sampler, **kwargs)
+        model = _train(conf, sampler, val_data, **kwargs)
         if dumpfn is not None:
             _dump(model, dumpfn)
     else:
         model = _load(dumpfn)
     if predict or test:
-        data = _predict(conf, sampler, model, **kwargs)
-        handle_predictions(conf, predict, test, data)
+        val_data.scores = model.predict(val_data.x,
+                                        batch_size=conf.rank.batch_size)
+        handle_predictions(conf, predict, test, val_data)
 
 
-def _train(conf, sampler, **kwargs):
+def _train(conf, sampler, val_data, **kwargs):
     model = _create_model(conf, sampler.emb_matrix)
-    data = sampler.training_samples(**kwargs)
-    model.fit(data.x, data.y, sample_weight=data.weights,
+    tr_data = sampler.training_samples(**kwargs)
+    model.fit(tr_data.x, tr_data.y, sample_weight=tr_data.weights,
+              validation_data=(val_data.x, val_data.y, val_data.weights),
               epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     return model
@@ -89,12 +92,6 @@ def _load(fn):
         'PairwiseSimilarity': PairwiseSimilarity,
     })
     return model
-
-
-def _predict(conf, sampler, model, **kwargs):
-    data = sampler.prediction_samples(**kwargs)
-    data.scores = model.predict(data.x, batch_size=conf.rank.batch_size)
-    return data
 
 
 def _create_model(conf, embeddings=None):
