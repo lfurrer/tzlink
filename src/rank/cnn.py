@@ -17,7 +17,7 @@ from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
 from keras import backend as K
 
 from ..conf.config import Config
-from ..preprocessing import word_embeddings as wemb, samples
+from ..preprocessing import samples
 from .predictions import handle_predictions
 
 
@@ -46,7 +46,7 @@ def main():
     run(**vars(args))
 
 
-def run(config, **kwargs):
+def run(config, dataset, **kwargs):
     '''
     Run the CNN (incl. preprocessing).
     '''
@@ -54,26 +54,27 @@ def run(config, **kwargs):
         if isinstance(config, str):
             config = [config]
         config = Config(*config)
+    config.general.dataset = dataset
     _run(config, **kwargs)
 
 
 def _run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
-    emb_lookup, emb_matrix = wemb.load(conf)
+    sampler = samples.Sampler(conf)
     if train:
-        model = _train(conf, emb_lookup, emb_matrix, subset='train', **kwargs)
+        model = _train(conf, sampler, **kwargs)
         if dumpfn is not None:
             _dump(model, dumpfn)
     else:
         model = _load(dumpfn)
     if predict or test:
-        data = _predict(conf, emb_lookup, model, subset='dev', **kwargs)
-        handle_predictions(conf, predict, test, *data)
+        data = _predict(conf, sampler, model, **kwargs)
+        handle_predictions(conf, predict, test, data)
 
 
-def _train(conf, emb_lookup, emb_matrix, **kwargs):
-    model = _create_model(conf, emb_matrix)
-    x_q, x_a, y = samples.training_samples(conf, emb_lookup, **kwargs)
-    model.fit([x_q, x_a], y, epochs=conf.rank.epochs,
+def _train(conf, sampler, **kwargs):
+    model = _create_model(conf, sampler.emb_matrix)
+    data = sampler.training_samples(**kwargs)
+    model.fit(data.x, data.y, epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     return model
 
@@ -89,11 +90,10 @@ def _load(fn):
     return model
 
 
-def _predict(conf, emb_lookup, model, **kwargs):
-    vecs, ids, occs = samples.prediction_samples(conf, emb_lookup, **kwargs)
-    x_q, x_a, _ = vecs
-    y_pred = model.predict([x_q, x_a], batch_size=conf.rank.batch_size)
-    return occs, y_pred, ids
+def _predict(conf, sampler, model, **kwargs):
+    data = sampler.prediction_samples(**kwargs)
+    data.scores = model.predict(data.x, batch_size=conf.rank.batch_size)
+    return data
 
 
 def _create_model(conf, embeddings=None):

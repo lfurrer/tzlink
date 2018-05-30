@@ -16,30 +16,30 @@ import csv
 NIL = 'NIL'
 
 
-def handle_predictions(conf, dump, evaluate, *args):
+def handle_predictions(conf, dump, evaluate, data):
     '''
     Write predictions to a TSV file and/or print evaluation figures.
     '''
     dumper = TSVWriter(conf, dump)
     evaluator = Evaluator(evaluate)
-    for entry in _itermentions(conf, *args):
+    for entry in _itermentions(conf, data):
         dumper.write(entry)
         evaluator.update(entry)
     dumper.close()
     evaluator.summary()
 
 
-def _itermentions(conf, occs, scores, id_index):
-    for *annotation, refs, start, end in occs:
+def _itermentions(conf, data):
+    for *annotation, refs, start, end in data.occs:
         if start != end:
-            i = max(range(start, end), key=scores.__getitem__)
-            score = scores[i]
-            ids = id_index[i]
+            i = max(range(start, end), key=data.scores.__getitem__)
+            score = data.scores[i]
+            ids = data.ids[i]
         else:
             score = None
             ids = []
         id_ = _disambiguate(conf, ids, score)
-        reachable = len(refs) == 1 and any(id_index[i].intersection(refs[0])
+        reachable = len(refs) == 1 and any(data.ids[i].intersection(refs[0])
                                            for i in range(start, end))
         yield (*annotation, refs, id_, len(ids), reachable)
 
