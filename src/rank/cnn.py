@@ -74,7 +74,8 @@ def _run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
 def _train(conf, sampler, **kwargs):
     model = _create_model(conf, sampler.emb_matrix)
     data = sampler.training_samples(**kwargs)
-    model.fit(data.x, data.y, epochs=conf.rank.epochs,
+    model.fit(data.x, data.y, sample_weight=data.weights,
+              epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     return model
 

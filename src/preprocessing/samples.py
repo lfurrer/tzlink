@@ -69,16 +69,19 @@ class Sampler:
 
     def _samples(self, corpus, oracle):
         occurrences = []
+        weights = []
         accumulators = [[], [], [], []]
         for item, vectors in self._itercandidates(corpus, oracle):
             (mention, ref_ids), occs = item
+            offset, length = len(accumulators[0]), len(vectors[0])
             for occ in occs:
-                offset, length = len(accumulators[0]), len(vectors[0])
                 occurrences.append((*occ, mention, ref_ids, offset, offset+length))
-                for accu, vec in zip(accumulators, vectors):
-                    accu.extend(vec)
-        data = DataSet(occurrences, *accumulators)
-        logging.info('generated %d pair-wise samples', len(data.y))
+            for accu, vec in zip(accumulators, vectors):
+                accu.extend(vec)
+            weights.extend(len(occs) for _ in range(length))
+        data = DataSet(occurrences, weights, *accumulators)
+        logging.info('generated %d pair-wise samples (%d with duplicates)',
+                     len(data.y), sum(data.weights))
         return data
 
     def _itercandidates(self, corpus, oracle):
@@ -99,6 +102,7 @@ class DataSet:
         x_q, x_a, y: vocabulary vectors of question and
             answer side, and the labels (2D numpy arrays)
         x: the list [x_q, x_a]
+        weights: counts of repeated samples (1D numpy array)
         scores: store the predictions here
         ids: candidate IDs (list of list of str)
             Has the same length as each of the sample
@@ -113,13 +117,14 @@ class DataSet:
             with i/j being the start/end indices wrt.
             to the rows of the sample vectors
     '''
-    def __init__(self, occs, x_q, x_a, y, ids):
+    def __init__(self, occs, weights, x_q, x_a, y, ids):
         # Original data.
         self.occs = occs
         # Vectorized data.
         self.x_q = np.array(x_q)
         self.x_a = np.array(x_a)
         self.y = np.array(y)
+        self.weights = np.array(weights)  # repetition counts
         self.scores = None  # hook for predictions
         # A set of candidate IDs for each sample.
         self.ids = ids
