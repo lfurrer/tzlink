@@ -5,7 +5,7 @@ init: embeddings ncbi-disease
 
 # Run target: train a model and evaluate it.
 run:
-	python3 -m src.rank -d ncbi-disease -t -p
+	python3 -m src.rank -t -p
 
 
 # Intermediate targets: specific paths.

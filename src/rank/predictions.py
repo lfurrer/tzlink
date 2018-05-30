@@ -130,6 +130,6 @@ class Evaluator:
 
     def _summary(self):
         labels = '''accuracy correct total
-                    unreachable ambiguous compound nocandidates'''.split()
+                    unreachable nocandidates ambiguous compound'''.split()
         for label in labels:
             print('{:12} {:5}'.format(label, getattr(self, label)))

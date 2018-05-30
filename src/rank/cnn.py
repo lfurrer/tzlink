@@ -9,57 +9,29 @@ Convolutional Neural Network for ranking mention-candidate pairs.
 '''
 
 
-import argparse
+import logging
 
 from keras.models import Model, load_model
 from keras.layers import Input, Dense, Concatenate, Layer
 from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
 from keras import backend as K
 
-from ..conf.config import Config
 from ..preprocessing import samples
 from .predictions import handle_predictions
 
 
-def main():
-    '''
-    Run as script.
-    '''
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument(
-        '-t', '--train', action='store_true',
-        help='train a new CNN ranking model '
-             '(instead of loading a previously trained one)')
-    ap.add_argument(
-        '-p', '--predict', action='store_true',
-        help='use the model to produce rankings')
-    ap.add_argument(
-        '-m', '--model', metavar='PATH', dest='dumpfn',
-        help='path for dumping and loading a trained model')
-    ap.add_argument(
-        '-c', '--config', metavar='PATH', nargs='+', default=(),
-        help='config file(s) for overriding the defaults')
-    ap.add_argument(
-        '-d', '--dataset', required=True,
-        help='which dataset to use')
-    args = ap.parse_args()
-    run(**vars(args))
-
-
-def run(config, dataset, **kwargs):
+def run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
     '''
     Run the CNN (incl. preprocessing).
     '''
-    if not isinstance(config, Config):
-        if isinstance(config, str):
-            config = [config]
-        config = Config(*config)
-    config.general.dataset = dataset
-    _run(config, **kwargs)
+    if not any([train, predict, test]):
+        logging.warning('nothing to do')
+        return
+    if dumpfn is None and not train:
+        raise ValueError('no model to train or load')
 
-
-def _run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
     sampler = samples.Sampler(conf)
+    logging.info('preprocessing validation data...')
     val_data = sampler.prediction_samples(**kwargs)
     if train:
         model = _train(conf, sampler, val_data, **kwargs)
@@ -74,12 +46,16 @@ def _run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
 
 
 def _train(conf, sampler, val_data, **kwargs):
+    logging.info('compiling model architecture...')
     model = _create_model(conf, sampler.emb_matrix)
+    logging.info('preprocessing training data...')
     tr_data = sampler.training_samples(**kwargs)
+    logging.info('training CNN...')
     model.fit(tr_data.x, tr_data.y, sample_weight=tr_data.weights,
               validation_data=(val_data.x, val_data.y, val_data.weights),
               epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
+    logging.info('done training.')
     return model
 
 
@@ -164,7 +140,3 @@ class PairwiseSimilarity(Layer):
     @staticmethod
     def compute_output_shape(input_shape):
         return (input_shape[0][0], 1)
-
-
-if __name__ == '__main__':
-    main()
