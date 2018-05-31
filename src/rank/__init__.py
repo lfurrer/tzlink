@@ -9,19 +9,20 @@ Entry point function for running the ranking CNN.
 '''
 
 
-from ..conf.config import Config
+import sys
+
+from ..util.util import get_config
+from ..util.record import Recorder
 
 
-def run(config, **kwargs):
+def run(config, record=False, **kwargs):
     '''
     Run the CNN (incl. preprocessing).
     '''
-    if not isinstance(config, Config):
-        if config is None:
-            config = []
-        elif isinstance(config, str):
-            config = [config]
-        config = Config(*config)
+    conf = get_config(config)
+    recorder = Recorder(conf)
 
     from . import cnn
-    cnn.run(config, **kwargs)
+    cnn.run(conf, test=[sys.stdout, recorder.results], **kwargs)
+    if record:
+        recorder.dump()

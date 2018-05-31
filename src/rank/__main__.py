@@ -23,6 +23,9 @@ def main():
         '-p', '--predict', action='store_true',
         help='use the model to produce rankings')
     ap.add_argument(
+        '-r', '--record', action='store_true',
+        help='create a summary with results and config info')
+    ap.add_argument(
         '-m', '--model', metavar='PATH', dest='dumpfn',
         help='path for dumping and loading a trained model')
     ap.add_argument(

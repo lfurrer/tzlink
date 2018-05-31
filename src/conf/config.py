@@ -9,6 +9,7 @@ Configuration handling.
 '''
 
 
+import io
 import os
 import time
 import logging
@@ -57,6 +58,16 @@ class Config(_Namespace):
         parser.read([DEFAULTS, *filenames])
         self._store(parser.items())
         self._setup_logging()
+
+        # Publicly accessible attribute: serialized config file.
+        self.dump = self._save_dump(parser)
+
+    @staticmethod
+    def _save_dump(parser):
+        '''Save a serialization of this configuration.'''
+        with io.StringIO() as f:
+            parser.write(f)
+            return f.getvalue()
 
     def _store(self, items):
         for sec_name, sec_proxy in items:

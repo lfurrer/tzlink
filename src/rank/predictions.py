@@ -9,8 +9,10 @@ Dump and evaluate predictions.
 '''
 
 
-import os
+import sys
 import csv
+
+from ..util.util import smart_open
 
 
 NIL = 'NIL'
@@ -20,13 +22,19 @@ def handle_predictions(conf, dump, evaluate, data):
     '''
     Write predictions to a TSV file and/or print evaluation figures.
     '''
+    if evaluate is True:
+        evaluate = [sys.stdout]
+    elif evaluate is False:
+        evaluate = []
+
     dumper = TSVWriter(conf, dump)
-    evaluator = Evaluator(evaluate)
+    evaluator = Evaluator()
     for entry in _itermentions(conf, data):
         dumper.write(entry)
         evaluator.update(entry)
     dumper.close()
-    evaluator.summary()
+    for file in evaluate:
+        evaluator.summary(file)
 
 
 def _itermentions(conf, data):
@@ -68,7 +76,7 @@ class TSVWriter:
         if enabled:
             self.write = self._write
             self.close = self._close
-            self._file = self._open(conf.io.prediction_fn)
+            self._file = smart_open(conf.logging.prediction_fn, 'w')
             self._writer = csv.writer(self._file, quotechar=None,
                                       delimiter='\t', lineterminator='\n')
         else:
@@ -82,18 +90,15 @@ class TSVWriter:
         fields[4] = '+'.join('|'.join(comp) for comp in fields[4])
         self._writer.writerow(fields)
 
-    @staticmethod
-    def _open(path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        file = open(path, 'w', encoding='utf8')
-        return file
-
     def _close(self):
         self._file.close()
 
 
 class Evaluator:
-    def __init__(self, enabled):
+    '''
+    Count a selection of outcomes and compute accuracy.
+    '''
+    def __init__(self):
         self.correct = 0
         self.total = 0
         self.unreachable = 0
@@ -101,20 +106,13 @@ class Evaluator:
         self.compound = 0
         self.nocandidates = 0
 
-        if enabled:
-            self.update = self._update
-            self.summary = self._summary
-        else:
-            # Dummy mode.
-            self.update = lambda _: None
-            self.summary = lambda: None
-
     @property
     def accuracy(self):
         '''Proportion of mentions with correct top-ranked ID.'''
         return self.correct/self.total
 
-    def _update(self, entry):
+    def update(self, entry):
+        '''Update counts.'''
         *_, refs, id_, n_ids, reachable = entry
         self.total += 1
         self.unreachable += not reachable
@@ -128,8 +126,9 @@ class Evaluator:
         elif n_ids > 1:
             self.ambiguous += 1
 
-    def _summary(self):
+    def summary(self, outfile):
+        '''Write an evaluation summary to outfile.'''
         labels = '''accuracy correct total
                     unreachable nocandidates ambiguous compound'''.split()
         for label in labels:
-            print('{:12} {:5}'.format(label, getattr(self, label)))
+            outfile.write('{:12} {:5}\n'.format(label, getattr(self, label)))
