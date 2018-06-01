@@ -3,6 +3,9 @@
 # Default target: initialise data/*
 init: embeddings ncbi-disease
 
+# Optional data: requires authentication
+optional: bpe
+
 # Run target: train a model and evaluate it.
 run:
 	python3 -m src.rank -t -p -r
@@ -10,6 +13,8 @@ run:
 
 # Intermediate targets: specific paths.
 embeddings: data/embeddings/wvec_50_haodi-li-et-al.bin
+
+bpe: $(addprefix data/embeddings/bpe_,abstract10000model vectors_10000_50_w2v.txt)
 
 
 ncbi-disease: nd-corpus nd-terminology
@@ -32,3 +37,7 @@ data/ncbi-disease/%.txt: | data/ncbi-disease
 
 data/ncbi-disease/CTD_diseases.tsv: | data/ncbi-disease
 	wget -O - https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/tmTools/download/DNorm/DNorm-0.0.7.tgz | tar -xzOf - DNorm-0.0.7/data/$(@F) > $@
+
+# Optional leaf targets.
+data/embeddings/bpe%: | data/embeddings
+	scp evex.utu.fi:/home/lhchan/glove/selftrained_bpe_model/$(subst bpe_,,$(@F)) $@

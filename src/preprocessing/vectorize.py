@@ -19,7 +19,10 @@ def get_tokenizer(conf):
     '''
     Select and instantiate a tokenizer.
     '''
-    name = conf.emb.tokenizer.lower()
+    return _get_tokenizer(conf.emb.tokenizer.lower(), conf.emb.tokenizer_model)
+
+
+def _get_tokenizer(name, model):
     if name == 'whitespace':
         # Simply split on whitespace.
         return str.split
@@ -31,6 +34,16 @@ def get_tokenizer(conf):
                 (?:[^\w\s]|_)+  # or other non-whitespace characters
                 ''', re.VERBOSE)
         return pattern.findall
+    if name == 'bpe':
+        from subword_nmt.apply_bpe import BPE
+        pretokenizer = _get_tokenizer('charclass', None)
+        with open(model, encoding='utf8') as f:
+            bpe = BPE(f)
+        def _tokenize(text):
+            pretok = ' '.join(pretokenizer(text))
+            tokens = bpe.segment(pretok)
+            return tokens.split()
+        return _tokenize
 
 
 class Vectorizer:
