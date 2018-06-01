@@ -71,7 +71,7 @@ def _load(fn):
 
 
 def _create_model(conf, embeddings=None):
-    inp_q, inp_a = (Input(shape=(conf.rank.sample_size,)) for _ in range(2))
+    inp_q, inp_a = (Input(shape=(conf.emb.sample_size,)) for _ in range(2))
     emb = _embedding_layer(conf, embeddings)
     sem_q = _semantic_layers(conf, emb(inp_q))
     sem_a = _semantic_layers(conf, emb(inp_a))
@@ -92,12 +92,12 @@ def _embedding_layer(conf, matrix=None):
         layer = Embedding(vocab_size,
                           embedding_dim,
                           weights=[matrix],
-                          input_length=conf.rank.sample_size,
+                          input_length=conf.emb.sample_size,
                           trainable=False)
     else:
-        layer = Embedding(conf.rank.embedding_voc,
-                          conf.rank.embedding_dim,
-                          input_length=conf.rank.sample_size)
+        layer = Embedding(conf.emb.embedding_voc,
+                          conf.emb.embedding_dim,
+                          input_length=conf.emb.sample_size)
     return layer
 
 

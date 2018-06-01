@@ -1,5 +1,5 @@
 # Large blobs
-data/wvec_50_haodi-li-et-al.bin
+data/embeddings
 data/ncbi-disease/
 
 # Generated output

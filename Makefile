@@ -9,7 +9,7 @@ run:
 
 
 # Intermediate targets: specific paths.
-embeddings: data/wvec_50_haodi-li-et-al.bin
+embeddings: data/embeddings/wvec_50_haodi-li-et-al.bin
 
 
 ncbi-disease: nd-corpus nd-terminology
@@ -20,11 +20,11 @@ nd-terminology: data/ncbi-disease/CTD_diseases.tsv
 
 
 # Directories.
-data data/ncbi-disease:
+data data/ncbi-disease data/embeddings:
 	mkdir -p $@
 
 # Leaf targets: download commands.
-data/wvec_50_haodi-li-et-al.bin: | data
+data/embeddings/wvec_50_haodi-li-et-al.bin: | data/embeddings
 	wget -O $@ https://github.com/wglassly/cnnormaliztion/raw/master/src/embeddings/vec_50.bin
 
 data/ncbi-disease/%.txt: | data/ncbi-disease

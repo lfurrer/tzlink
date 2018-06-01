@@ -9,13 +9,28 @@ Convert text to integer vectors.
 '''
 
 
+import re
 from string import punctuation
 
 import numpy as np
 
 
-def _tokenize(text):
-    return text.split()
+def get_tokenizer(conf):
+    '''
+    Select and instantiate a tokenizer.
+    '''
+    name = conf.emb.tokenizer.lower()
+    if name == 'whitespace':
+        # Simply split on whitespace.
+        return str.split
+    if name == 'charclass':
+        # Tokenize on change of character class.
+        pattern = re.compile(
+            r'''\d+|            # match contiguous runs of digits
+                [^\W\d_]+|      # or letters
+                (?:[^\w\s]|_)+  # or other non-whitespace characters
+                ''', re.VERBOSE)
+        return pattern.findall
 
 
 class Vectorizer:
@@ -29,8 +44,9 @@ class Vectorizer:
 
     def __init__(self, conf, vocab):
         self.vocab = vocab
-        self.length = conf.rank.sample_size  # max number of tokens per vector
-        if conf.general.vectorizer_cache:  # trade speed for memory?
+        self.length = conf.emb.sample_size  # max number of tokens per vector
+        self._tokenize = get_tokenizer(conf)
+        if conf.emb.vectorizer_cache:  # trade memory for speed?
             self._cache = {}
         else:
             self.vectorize = self._vectorize  # hide the cache wrapper method
@@ -46,7 +62,7 @@ class Vectorizer:
         return vector
 
     def _vectorize(self, text):
-        vector = list(self._lookup(_tokenize(text)))
+        vector = list(self._lookup(self._tokenize(text)))
         # Pad or truncate the vector to the required size.
         if len(vector) < self.length:
             vector.extend(self.PAD for _ in range(len(vector), self.length))
