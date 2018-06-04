@@ -20,7 +20,7 @@ from ..preprocessing import samples
 from .predictions import handle_predictions
 
 
-def run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
+def run(conf, train=True, predict=True, test=True, dumpfn=None):
     '''
     Run the CNN (incl. preprocessing).
     '''
@@ -32,9 +32,9 @@ def run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
 
     sampler = samples.Sampler(conf)
     logging.info('preprocessing validation data...')
-    val_data = sampler.prediction_samples(**kwargs)
+    val_data = sampler.prediction_samples()
     if train:
-        model = _train(conf, sampler, val_data, **kwargs)
+        model = _train(conf, sampler, val_data)
         if dumpfn is not None:
             _dump(model, dumpfn)
     else:
@@ -45,11 +45,11 @@ def run(conf, train=True, predict=True, test=True, dumpfn=None, **kwargs):
         handle_predictions(conf, predict, test, val_data)
 
 
-def _train(conf, sampler, val_data, **kwargs):
+def _train(conf, sampler, val_data):
     logging.info('compiling model architecture...')
     model = _create_model(conf, sampler.emb_matrix)
     logging.info('preprocessing training data...')
-    tr_data = sampler.training_samples(**kwargs)
+    tr_data = sampler.training_samples()
     logging.info('training CNN...')
     model.fit(tr_data.x, tr_data.y, sample_weight=tr_data.weights,
               validation_data=(val_data.x, val_data.y, val_data.weights),
