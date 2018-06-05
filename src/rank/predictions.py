@@ -111,6 +111,16 @@ class Evaluator:
         '''Proportion of mentions with correct top-ranked ID.'''
         return self.correct/self.total
 
+    @classmethod
+    def from_data(cls, conf, data):
+        '''
+        Create an already populated Evaluator instance.
+        '''
+        evaluator = cls()
+        for entry in _itermentions(conf, data):
+            evaluator.update(entry)
+        return evaluator
+
     def update(self, entry):
         '''Update counts.'''
         *_, refs, id_, n_ids, reachable = entry

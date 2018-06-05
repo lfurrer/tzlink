@@ -18,6 +18,7 @@ from keras import backend as K
 
 from ..preprocessing import samples
 from .predictions import handle_predictions
+from .callback import EarlyStoppingRankingAccuracy
 
 
 def run(conf, train=True, predict=True, test=True, dumpfn=None):
@@ -51,8 +52,10 @@ def _train(conf, sampler, val_data):
     logging.info('preprocessing training data...')
     tr_data = sampler.training_samples()
     logging.info('training CNN...')
+    earlystopping = EarlyStoppingRankingAccuracy(conf, val_data)
     model.fit(tr_data.x, tr_data.y, sample_weight=tr_data.weights,
               validation_data=(val_data.x, val_data.y, val_data.weights),
+              callbacks=[earlystopping],
               epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     logging.info('done training.')
