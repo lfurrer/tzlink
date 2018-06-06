@@ -62,13 +62,19 @@ class Vectorizer:
         return vector
 
     def _vectorize(self, text):
-        vector = list(self._lookup(self._tokenize(text)))
+        vector = self.indices(text)
         # Pad or truncate the vector to the required size.
         if len(vector) < self.length:
             vector.extend(self.PAD for _ in range(len(vector), self.length))
         elif len(vector) > self.length:
             vector[self.length:] = []
         return np.array(vector)
+
+    def indices(self, text):
+        '''
+        Convert a piece of text to a variable-length list of int.
+        '''
+        return list(self._lookup(self._tokenize(text)))
 
     def _lookup(self, tokens):
         for token in tokens:

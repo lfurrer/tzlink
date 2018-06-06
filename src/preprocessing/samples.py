@@ -35,6 +35,8 @@ class Sampler:
         self.voc_index = None
         self.emb_matrix = None
         self.terminology = None
+        self.vectorizer = None
+        self.cand_gen = None
         self._pool = None
         self._load()
 
@@ -43,14 +45,14 @@ class Sampler:
         self.voc_index, self.emb_matrix = load_wemb(self.conf)
         logging.info('loading terminology...')
         self.terminology = load_dict(self.conf, self.conf.general.dataset)
-        logging.info('loading candidate generator...')
-        cand_gen = candidate_generator(self.conf, self.terminology)
         logging.info('loading vectorizer...')
-        vectorizer = Vectorizer(self.conf, self.voc_index)
+        self.vectorizer = Vectorizer(self.conf, self.voc_index)
+        logging.info('loading candidate generator...')
+        self.cand_gen = candidate_generator(self)
         logging.info('initializing multiprocessing pool')
         self._pool = mp.Pool(self.conf.candidates.workers,
                              initializer=_set_global_instances,
-                             initargs=[cand_gen, vectorizer])
+                             initargs=[self.cand_gen, self.vectorizer])
 
     def training_samples(self):
         '''Default-value wrapper around self.samples().'''
