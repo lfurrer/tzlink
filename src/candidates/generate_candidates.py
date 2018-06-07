@@ -14,27 +14,34 @@ import ast
 import itertools as it
 from collections import defaultdict, Counter
 
+import numpy as np
+from gensim.models.keyedvectors import KeyedVectors, Vocab
 
-def candidate_generator(conf, terminology):
+
+def candidate_generator(sampler):
     '''
     Select and instantiate a candidate generator.
+
+    Provide a sampler object to the candidate generators to
+    allow sharing resources.
     '''
     # Get generator name and arguments from the config value.
-    value = conf.candidates.generator
+    value = sampler.conf.candidates.generator
     name, args = re.fullmatch(r'(\w+)(.*)', value).groups()
 
     cls = {
         'sgramfixedset': SGramFixedSetCandidates,
+        'phrasevecfixedset': PhraseVecFixedSetCandidates,
     }[name.lower()]
     if args:
         args = ast.literal_eval(args)
 
-    return cls(terminology, *args)
+    return cls(sampler, *args)
 
 
 class _BaseCandidateGenerator:
-    def __init__(self, terminology):
-        self.terminology = terminology
+    def __init__(self, shared):
+        self.terminology = shared.terminology
 
     def samples(self, mention, ref_ids, oracle=False):
         '''
@@ -87,8 +94,8 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
     N best candidates based on absolute skip-gram overlap.
     '''
 
-    def __init__(self, terminology, size=20, sgrams=((2, 1), (3, 1))):
-        super().__init__(terminology)
+    def __init__(self, shared, size=20, sgrams=((2, 1), (3, 1))):
+        super().__init__(shared)
         self.size = size
         self.shapes = sgrams  # <n, k>
         self._sgram_index = self._create_index()
@@ -102,8 +109,14 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
         return dict(index)
 
     def candidates(self, mention):
+        return set(self.sorted_candidates(mention))
+
+    def sorted_candidates(self, mention):
+        '''
+        Iterate over candidates, sorted by decreasing overlap.
+        '''
         candidates = self.all_candidates(mention)
-        return set(c for c, _ in candidates.most_common(self.size))
+        return (c for c, _ in candidates.most_common(self.size))
 
     def all_candidates(self, mention):
         '''
@@ -137,3 +150,53 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
 
 # Empty dict instance used for some optimisation.
 _D = {}
+
+
+class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
+    '''
+    N best candidates based on phrase-vector similarity.
+    '''
+
+    def __init__(self, shared, size=20, comb='sum'):
+        super().__init__(shared)
+        self.size = size
+        self.combine = getattr(np, comb)
+        self._vectorizer = shared.vectorizer
+        self._wv = shared.emb_matrix
+        self._pv = self._create_pv()
+
+    def _create_pv(self):
+        try:
+            vectors = KeyedVectors()
+        except TypeError:
+            # Newer versions of gensim require a constructor argument.
+            vectors = KeyedVectors(self._wv.shape[1])
+        for name in self.terminology.iter_names():
+            # This iterates over unique names.
+            vectors.vocab[name] = Vocab(index=len(vectors.vocab), count=None)
+            vectors.index2word.append(name)
+            vectors.syn0.append(self._phrase_vector(name))
+        vectors.syn0 = vectors.syn0norm = np.array(vectors.syn0)
+        return vectors
+
+    def _phrase_vector(self, phrase):
+        indices = self._vectorizer.indices(phrase)
+        vectors = [self._wv[i] for i in indices]
+        phrase = self.combine(vectors, axis=0)
+        self._L2normalize(phrase)
+        return phrase
+
+    @staticmethod
+    def _L2normalize(vector):
+        vector /= np.sqrt((vector**2).sum())
+
+    def candidates(self, mention):
+        return set(self.sorted_candidates(mention))
+
+    def sorted_candidates(self, mention):
+        '''
+        Iterate over candidates, sorted by decreasing similarity.
+        '''
+        vector = self._phrase_vector(mention)
+        candidates = self._pv.most_similar(positive=[vector], topn=self.size)
+        return (c for c, _, in candidates)
