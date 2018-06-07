@@ -25,8 +25,16 @@ def candidate_generator(sampler):
     Provide a sampler object to the candidate generators to
     allow sharing resources.
     '''
+    # Account for multiple generators.
+    values = sampler.conf.candidates.generator.split('\n')
+    generators = [_create_generator(v.strip(), sampler) for v in values]
+    if len(generators) > 1:
+        return _MultiGenerator(sampler, generators)
+    return generators[0]
+
+
+def _create_generator(value, sampler):
     # Get generator name and arguments from the config value.
-    value = sampler.conf.candidates.generator
     name, args = re.fullmatch(r'(\w+)(.*)', value).groups()
 
     cls = {
@@ -87,6 +95,30 @@ class _BaseCandidateGenerator:
             # Don't generate positive examples for compound concepts.
             return set()
         return ids[0]
+
+
+class _MultiGenerator(_BaseCandidateGenerator):
+    '''
+    Wrapper for combining candidates from multiple generators.
+    '''
+    def __init__(self, shared, generators):
+        super().__init__(shared)
+        self.generators = generators
+
+    def candidates(self, mention):
+        return set().union(*(g.candidates(mention) for g in self.generators))
+
+    def sorted_candidates(self, mention):
+        '''
+        Iterate over sorted candidates from all generators.
+
+        The generators take turns in yielding a candidate.
+        This requires that all generators support a
+        sorted_candidates method.
+        '''
+        merged = zip(*(g.sorted_candidates(mention) for g in self.generators))
+        for round_ in merged:
+            yield from round_
 
 
 class SGramFixedSetCandidates(_BaseCandidateGenerator):
