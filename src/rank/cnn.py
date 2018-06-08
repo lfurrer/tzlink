@@ -75,16 +75,17 @@ def _load(fn):
 
 def _create_model(conf, embeddings=None):
     inp_q, inp_a = (Input(shape=(conf.emb.sample_size,)) for _ in range(2))
+    inp_score = Input(shape=(1,))  # candidate score
     emb = _embedding_layer(conf, embeddings)
     sem_q = _semantic_layers(conf, emb(inp_q))
     sem_a = _semantic_layers(conf, emb(inp_a))
     v_sem = PairwiseSimilarity()([sem_q, sem_a])
-    join_layer = Concatenate()([sem_q, v_sem, sem_a])
+    join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_score])
     hidden_layer = Dense(units=1+2*conf.rank.n_kernels,
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(inp_q, inp_a), outputs=logistic_regression)
+    model = Model(inputs=(inp_q, inp_a, inp_score), outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
 

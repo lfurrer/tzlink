@@ -53,9 +53,11 @@ class _BaseCandidateGenerator:
 
     def samples(self, mention, ref_ids, oracle=False):
         '''
-        Iterate over pairs <candidate, label>.
+        Iterate over triples <candidate, score, label>.
 
         The candidate is a name string.
+        The score correspondes to the confidence of the
+        candidate generator.
         The label is True and False for positive and negative
         samples, respectively.
 
@@ -65,15 +67,16 @@ class _BaseCandidateGenerator:
         also for names that weren't found through the
         candidate retrieval mechanism.
         '''
-        candidates = self.candidates(mention)
+        candidates = self.scored_candidates(mention)
         positive = self._positive_samples(ref_ids)
-        negative = candidates.difference(positive)
+        negative = set(candidates).difference(positive)
         if not oracle:
-            positive = candidates.intersection(positive)
+            positive = positive.intersection(candidates)
 
         for subset, label in ((positive, True), (negative, False)):
             for cand in subset:
-                yield cand, label
+                score = candidates.get(cand, 0)
+                yield cand, score, label
 
     def _positive_samples(self, ref_ids):
         ids = self._select_ids(ref_ids)
@@ -83,6 +86,12 @@ class _BaseCandidateGenerator:
     def candidates(self, mention):
         '''
         Compute a set of candidate names from the dictionary.
+        '''
+        raise NotImplementedError
+
+    def scored_candidates(self, mention):
+        '''
+        Create a dict of candidate names mapped to a score.
         '''
         raise NotImplementedError
 
@@ -107,6 +116,13 @@ class _MultiGenerator(_BaseCandidateGenerator):
 
     def candidates(self, mention):
         return set().union(*(g.candidates(mention) for g in self.generators))
+
+    def scored_candidates(self, mention):
+        candidates = Counter()  # works with float values just fine
+        for g in self.generators:
+            # On collisions, Counter.update sums the values.
+            candidates.update(g.scored_candidates(mention))
+        return candidates
 
     def sorted_candidates(self, mention):
         '''
@@ -142,6 +158,10 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
 
     def candidates(self, mention):
         return set(self.sorted_candidates(mention))
+
+    def scored_candidates(self, mention):
+        scored = self.all_candidates(mention).most_common(self.size)
+        return rank_scored(scored)
 
     def sorted_candidates(self, mention):
         '''
@@ -225,10 +245,32 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
     def candidates(self, mention):
         return set(self.sorted_candidates(mention))
 
+    def scored_candidates(self, mention):
+        return rank_scored(self._scored_candidates(mention))
+
     def sorted_candidates(self, mention):
         '''
         Iterate over candidates, sorted by decreasing similarity.
         '''
+        return (c for c, _, in self._scored_candidates(mention))
+
+    def _scored_candidates(self, mention):
+        '''
+        Candidates with actual similarity scores.
+        '''
         vector = self._phrase_vector(mention)
-        candidates = self._pv.most_similar(positive=[vector], topn=self.size)
-        return (c for c, _, in candidates)
+        return self._pv.most_similar(positive=[vector], topn=self.size)
+
+
+def rank_scored(scored):
+    '''
+    Convert arbitrary scores to 1/rank scores.
+    '''
+    candidates = {}
+    rank, previous = 0, None
+    for cand, score in scored:
+        if score != previous:
+            rank += 1
+            previous = score
+        candidates[cand] = 1/rank
+    return candidates

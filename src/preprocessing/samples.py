@@ -76,7 +76,7 @@ class Sampler:
     def _samples(self, corpus, oracle):
         occurrences = []
         weights = []
-        accumulators = [[], [], [], []]
+        accumulators = ([], [], [], [], [])
         for item, vectors in self._itercandidates(corpus, oracle):
             (mention, ref_ids), occs = item
             offset, length = len(accumulators[0]), len(vectors[0])
@@ -123,12 +123,13 @@ class DataSet:
             with i/j being the start/end indices wrt.
             to the rows of the sample vectors
     '''
-    def __init__(self, occs, weights, x_q, x_a, y, ids):
+    def __init__(self, occs, weights, x_q, x_a, x_scores, y, ids):
         # Original data.
         self.occs = occs
         # Vectorized data.
         self.x_q = np.array(x_q)
         self.x_a = np.array(x_a)
+        self.x_scores = np.array(x_scores)
         self.y = np.array(y)
         self.weights = np.array(weights)  # repetition counts
         self.scores = None  # hook for predictions
@@ -138,7 +139,7 @@ class DataSet:
     @property
     def x(self):
         '''List of input tensors.'''
-        return [self.x_q, self.x_a]
+        return [self.x_q, self.x_a, self.x_scores]
 
 
 def _deduplicated(corpus, terminology):
@@ -177,12 +178,13 @@ def _set_global_instances(cand_gen, vectorizer):
 
 def _worker_task(item):
     (mention, ref_ids), oracle = item
-    q, a, labels, cand_ids = [], [], [], []
+    q, a, scores, labels, cand_ids = [], [], [], [], []
     vec_q = VECTORIZER.vectorize(mention)
-    for candidate, label in CAND_GEN.samples(mention, ref_ids, oracle):
-        vec_a = VECTORIZER.vectorize(candidate)
+    for cand, score, label in CAND_GEN.samples(mention, ref_ids, oracle):
+        vec_a = VECTORIZER.vectorize(cand)
         q.append(vec_q)
         a.append(vec_a)
+        scores.append(score)
         labels.append((float(label),))
-        cand_ids.append(CAND_GEN.terminology.ids([candidate]))
-    return q, a, labels, cand_ids
+        cand_ids.append(CAND_GEN.terminology.ids([cand]))
+    return q, a, scores, labels, cand_ids
