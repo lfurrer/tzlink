@@ -12,6 +12,7 @@ Configuration handling.
 import io
 import os
 import time
+import json
 import logging
 import configparser as cp
 
@@ -82,9 +83,12 @@ class Config(_Namespace):
     @classmethod
     def _guess_type(cls, section, param):
         '''
-        Try typecasting to int, float, boolean (in that order).
+        Try typecasting to int, float, dict, list, boolean.
+
+        Try JSON first, then fall back to configparser's
+        boolean, otherwise return a string.
         '''
-        for func in (section.getint, section.getfloat, section.getboolean):
+        for func in (lambda p: json.loads(section.get(p)), section.getboolean):
             try:
                 return func(param)
             except ValueError:
