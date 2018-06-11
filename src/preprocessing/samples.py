@@ -49,10 +49,16 @@ class Sampler:
         self.vectorizer = Vectorizer(self.conf, self.voc_index)
         logging.info('loading candidate generator...')
         self.cand_gen = candidate_generator(self)
-        logging.info('initializing multiprocessing pool')
-        self._pool = mp.Pool(self.conf.candidates.workers,
-                             initializer=_set_global_instances,
-                             initargs=[self.cand_gen, self.vectorizer])
+
+    @property
+    def pool(self):
+        '''Multiprocessing pool for parallel sample generation.'''
+        if self._pool is None:
+            logging.info('initializing multiprocessing pool')
+            self._pool = mp.Pool(self.conf.candidates.workers,
+                                 initializer=_set_global_instances,
+                                 initargs=[self.cand_gen, self.vectorizer])
+        return self._pool
 
     def training_samples(self):
         '''Default-value wrapper around self.samples().'''
@@ -93,10 +99,14 @@ class Sampler:
     def _itercandidates(self, corpus, oracle):
         logging.info('loading corpus...')
         mentions = _deduplicated(corpus, self.terminology)
-        logging.info('generating candidates with %d workers...',
-                     self.conf.candidates.workers)
-        items = [(key, oracle) for key in mentions]
-        vectorized = self._pool.imap(_worker_task, items, chunksize=20)
+        workers = self.conf.candidates.workers
+        logging.info('generating candidates with %d workers...', workers)
+        if workers >= 1:
+            items = [(key, oracle) for key in mentions]
+            vectorized = self.pool.imap(_worker_task, items, chunksize=20)
+        else:
+            vectorized = (_task((key, oracle), self.cand_gen, self.vectorizer)
+                          for key in mentions)
         yield from zip(mentions.items(), vectorized)
 
 
@@ -177,14 +187,18 @@ def _set_global_instances(cand_gen, vectorizer):
 
 
 def _worker_task(item):
+    return _task(item, CAND_GEN, VECTORIZER)
+
+
+def _task(item, cand_gen, vectorizer):
     (mention, ref_ids), oracle = item
     q, a, scores, labels, cand_ids = [], [], [], [], []
-    vec_q = VECTORIZER.vectorize(mention)
-    for cand, score, label in CAND_GEN.samples(mention, ref_ids, oracle):
-        vec_a = VECTORIZER.vectorize(cand)
+    vec_q = vectorizer.vectorize(mention)
+    for cand, score, label in cand_gen.samples(mention, ref_ids, oracle):
+        vec_a = vectorizer.vectorize(cand)
         q.append(vec_q)
         a.append(vec_a)
         scores.append(score)
         labels.append((float(label),))
-        cand_ids.append(CAND_GEN.terminology.ids([cand]))
+        cand_ids.append(cand_gen.terminology.ids([cand]))
     return q, a, scores, labels, cand_ids
