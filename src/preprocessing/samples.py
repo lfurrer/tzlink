@@ -82,16 +82,15 @@ class Sampler:
     def _samples(self, corpus, oracle):
         occurrences = []
         weights = []
-        accumulators = ([], [], [], [], [])
-        for item, vectors in self._itercandidates(corpus, oracle):
+        samples = []  # holds 5-tuples <x_q, x_a, scores, y, ids>
+        for item, numbers in self._itercandidates(corpus, oracle):
             (mention, ref_ids), occs = item
-            offset, length = len(accumulators[0]), len(vectors[0])
+            offset, length = len(samples), len(numbers)
             for occ in occs:
                 occurrences.append((*occ, mention, ref_ids, offset, offset+length))
-            for accu, vec in zip(accumulators, vectors):
-                accu.extend(vec)
+            samples.extend(numbers)
             weights.extend(len(occs) for _ in range(length))
-        data = DataSet(occurrences, weights, *accumulators)
+        data = DataSet(occurrences, weights, *zip(*samples))
         logging.info('generated %d pair-wise samples (%d with duplicates)',
                      len(data.y), sum(data.weights))
         return data
@@ -102,12 +101,24 @@ class Sampler:
         workers = self.conf.candidates.workers
         logging.info('generating candidates with %d workers...', workers)
         if workers >= 1:
-            items = [(key, oracle) for key in mentions]
-            vectorized = self.pool.imap(_worker_task, items, chunksize=20)
+            # Group into chunks and flatten the result.
+            chunks = [(chunk, oracle) for chunk in self._chunks(mentions, 100)]
+            vectorized = self.pool.imap(_worker_task, chunks)
+            vectorized = (elem for chunk in vectorized for elem in chunk)
         else:
-            vectorized = (_task((key, oracle), self.cand_gen, self.vectorizer)
-                          for key in mentions)
+            vectorized = _task(mentions, oracle, self.cand_gen, self.vectorizer)
         yield from zip(mentions.items(), vectorized)
+
+    @staticmethod
+    def _chunks(items, size):
+        chunk = []
+        for item in items:
+            chunk.append(item)
+            if len(chunk) == size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
 
 
 class DataSet:
@@ -186,19 +197,21 @@ def _set_global_instances(cand_gen, vectorizer):
     VECTORIZER = vectorizer
 
 
-def _worker_task(item):
-    return _task(item, CAND_GEN, VECTORIZER)
+def _worker_task(arg):
+    return list(_task(*arg, CAND_GEN, VECTORIZER))
 
 
-def _task(item, cand_gen, vectorizer):
-    (mention, ref_ids), oracle = item
-    q, a, scores, labels, cand_ids = [], [], [], [], []
-    vec_q = vectorizer.vectorize(mention)
-    for cand, score, label in cand_gen.samples(mention, ref_ids, oracle):
-        vec_a = vectorizer.vectorize(cand)
-        q.append(vec_q)
-        a.append(vec_a)
-        scores.append(score)
-        labels.append((float(label),))
-        cand_ids.append(cand_gen.terminology.ids([cand]))
-    return q, a, scores, labels, cand_ids
+def _task(items, oracle, cand_gen, vectorizer):
+    for mention, samples in cand_gen.samples_many(items, oracle):
+        vec_q = vectorizer.vectorize(mention)
+        data = []
+        for cand, score, label in samples:
+            vec_a = vectorizer.vectorize(cand)
+            data.append((
+                vec_q,
+                vec_a,
+                score,
+                (float(label),),
+                cand_gen.terminology.ids([cand]),
+            ))
+        yield data

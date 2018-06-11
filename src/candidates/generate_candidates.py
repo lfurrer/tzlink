@@ -70,6 +70,28 @@ class _BaseCandidateGenerator:
         candidate retrieval mechanism.
         '''
         candidates = self.scored_candidates(mention)
+        return self._samples(candidates, ref_ids, oracle)
+
+    def samples_many(self, items, oracle=False):
+        '''
+        Generate samples for multiple mentions.
+
+        Args:
+            items: an iterable of pairs <mention, ref_ids>.
+                The iterable must allow repeated iteration.
+            oracle: flag for including unreachable positive
+                examples
+
+        Return a nested iterator:
+            <mention, samples> for each mention
+                <candidate, score, label> for each sample
+        '''
+        candidates = self.scored_candidates_many([m for m, _ in items])
+        for (mention, ref_ids), cand in zip(items, candidates):
+            samples = self._samples(cand, ref_ids, oracle)
+            yield mention, samples
+
+    def _samples(self, candidates, ref_ids, oracle):
         positive = self._positive_samples(ref_ids)
         negative = set(candidates).difference(positive)
         if not oracle:
@@ -97,6 +119,20 @@ class _BaseCandidateGenerator:
         '''
         raise NotImplementedError
 
+    def candidates_many(self, mentions):
+        '''
+        Iterate over a set of candidates for each mention.
+        '''
+        for m in mentions:
+            yield self.candidates(m)
+
+    def scored_candidates_many(self, mentions):
+        '''
+        Iterate over a dict of scored candidates for each mention.
+        '''
+        for m in mentions:
+            yield self.scored_candidates(m)
+
     @staticmethod
     def _select_ids(ids):
         '''
@@ -120,26 +156,43 @@ class _MultiGenerator(_BaseCandidateGenerator):
         return set().union(*(g.candidates(mention) for g in self.generators))
 
     def scored_candidates(self, mention):
-        candidates = Counter()  # works with float values just fine
-        for g in self.generators:
-            # On collisions, Counter.update sums the values.
-            candidates.update(g.scored_candidates(mention))
-        return candidates
+        return self._sum_scores(g.scored_candidates(mention)
+                                for g in self.generators)
 
     def sorted_candidates(self, mention):
         '''
         Iterate over sorted candidates from all generators.
 
-        The generators take turns in yielding a candidate.
-        This requires that all generators support a
-        sorted_candidates method.
+        Sorting is based on the rank scores from each generator.
         '''
-        merged = it.zip_longest(*(g.sorted_candidates(mention)
-                                  for g in self.generators))
-        for round_ in merged:
-            for candidate in round_:
-                if candidate is not None:
-                    yield candidate
+        for candidate, _ in self.scored_candidates(mention).most_common():
+            yield candidate
+
+    def candidates_many(self, mentions):
+        for candidates in zip(*(g.candidates_many(mentions)
+                                for g in self.generators)):
+            yield set().union(*candidates)
+
+    def scored_candidates_many(self, mentions):
+        for scored in zip(*(g.scored_candidates_many(mentions)
+                            for g in self.generators)):
+            yield self._sum_scores(scored)
+
+    def sorted_candidates_many(self, mentions):
+        '''
+        Nested iteration over sorted candidates from all generators.
+        '''
+        for scored in self.scored_candidates_many(mentions):
+            for candidate, _, in scored.most_common():
+                yield candidate
+
+    @staticmethod
+    def _sum_scores(scored):
+        candidates = Counter()  # works with float values just fine
+        for s in scored:
+            # On collisions, Counter.update sums the values.
+            candidates.update(s)
+        return candidates
 
 
 class SGramFixedSetCandidates(_BaseCandidateGenerator):
@@ -271,10 +324,10 @@ class SGramCosineCandidates(SGramFixedSetCandidates):
         '''
         return next(iter(self._scored_candidates_many([mention])))
 
+    def candidates_many(self, mentions):
+        return map(set, self.sorted_candidates_many(mentions))
+
     def scored_candidates_many(self, mentions):
-        '''
-        Iterate over a dict of scored candidates for each mention.
-        '''
         return map(rank_scored, self._scored_candidates_many(mentions))
 
     def sorted_candidates_many(self, mentions):
