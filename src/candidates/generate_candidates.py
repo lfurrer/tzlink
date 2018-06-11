@@ -134,9 +134,12 @@ class _MultiGenerator(_BaseCandidateGenerator):
         This requires that all generators support a
         sorted_candidates method.
         '''
-        merged = zip(*(g.sorted_candidates(mention) for g in self.generators))
+        merged = it.zip_longest(*(g.sorted_candidates(mention)
+                                  for g in self.generators))
         for round_ in merged:
-            yield from round_
+            for candidate in round_:
+                if candidate is not None:
+                    yield candidate
 
 
 class SGramFixedSetCandidates(_BaseCandidateGenerator):
