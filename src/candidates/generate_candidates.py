@@ -15,6 +15,7 @@ import itertools as it
 from collections import defaultdict, Counter
 
 import numpy as np
+from scipy.sparse import csr_matrix
 from gensim.models.keyedvectors import KeyedVectors, Vocab
 
 
@@ -39,6 +40,7 @@ def _create_generator(value, sampler):
 
     cls = {
         'sgramfixedset': SGramFixedSetCandidates,
+        'sgramcosine': SGramCosineCandidates,
         'phrasevecfixedset': PhraseVecFixedSetCandidates,
     }[name.lower()]
     if args:
@@ -204,6 +206,103 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
 _D = {}
 
 
+class SGramCosineCandidates(SGramFixedSetCandidates):
+    '''
+    Candidates based on cosine similarity of skip-grams.
+
+    If the size parameter is a non-zero number, the candidate
+    sets are truncated to that length.
+    Also, candidates with a cosine similarity below threshold
+    are removed from the set.
+    Inversely: if both size and threshold are 0, the
+    candidate set consists of the entire terminology.
+    '''
+
+    def __init__(self, shared, threshold=.7, *args, **kwargs):
+        super().__init__(shared, *args, **kwargs)
+        self.threshold = threshold
+        self._names = list(self.terminology.iter_names())
+        self._sgram_matrix = self._create_matrix(self._names, update=True)
+
+    def _create_index(self):
+        '''
+        Initialize a dict for the s-gram vocabulary.
+
+        This is mainly a placeholder for overriding the superclass method.
+        '''
+        return {}
+
+    def _create_matrix(self, names, update=False):
+        data_triple = self._matrix_data(names, update)
+        rows = len(data_triple[2]) - 1     # len(indptr) == rows+1
+        cols = len(self._sgram_index) + 1  # add a column for unseen s-grams
+        return csr_matrix(data_triple, shape=(rows, cols))
+
+    def _matrix_data(self, names, update):
+        '''
+        Create a <data, indices, indptr> triple for a CSR matrix.
+        '''
+        indptr = [0]
+        indices = []
+        data = []
+        vocabulary = self._sgram_index
+        lookup = vocabulary.setdefault if update else vocabulary.get
+        for name in names:
+            sgrams = Counter(self._preprocess(name))
+            indices.extend(lookup(s, len(vocabulary)) for s in sgrams)
+            indptr.append(len(indices))
+            row = np.fromiter(sgrams.values(), dtype=float, count=len(sgrams))
+            L2normalize(row)
+            data.append(row)
+        return np.concatenate(data), indices, indptr
+
+    def scored_candidates(self, mention):
+        return next(iter(self.scored_candidates_many([mention])))
+
+    def sorted_candidates(self, mention):
+        return next(iter(self.sorted_candidates_many([mention])))
+
+    def all_candidates(self, mention):
+        '''
+        Iterate over candidates and cosine similarity scores.
+        '''
+        return next(iter(self._scored_candidates_many([mention])))
+
+    def scored_candidates_many(self, mentions):
+        '''
+        Iterate over a dict of scored candidates for each mention.
+        '''
+        return map(rank_scored, self._scored_candidates_many(mentions))
+
+    def sorted_candidates_many(self, mentions):
+        '''
+        Nested iterator over candidate names, sorted by cosine similarity.
+        '''
+        for scored in self._scored_candidates_many(mentions):
+            yield (c for c, _ in scored)
+
+    def _scored_candidates_many(self, mentions):
+        '''
+        Nested iterator over candidate names with cosine similarity.
+        '''
+        sgrams = self._create_matrix(mentions)
+        sim = self._sgram_matrix.dot(sgrams.T)
+        sim = sim.toarray()
+        for i in range(sim.shape[1]):
+            yield self._cosine_scored_candidates(sim[:, i])
+
+    def _cosine_scored_candidates(self, sim):
+        if self.size:
+            indices = np.argpartition(-sim, range(self.size))[:self.size]
+        else:
+            indices = np.argsort(-sim)
+        for i in indices:
+            cos = sim[i]
+            if cos < self.threshold:
+                break
+            yield self._names[i], cos
+
+
 class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
     '''
     N best candidates based on phrase-vector similarity.
@@ -235,12 +334,8 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         indices = self._vectorizer.indices(phrase)
         vectors = [self._wv[i] for i in indices]
         phrase = self.combine(vectors, axis=0)
-        self._L2normalize(phrase)
+        L2normalize(phrase)
         return phrase
-
-    @staticmethod
-    def _L2normalize(vector):
-        vector /= np.sqrt((vector**2).sum())
 
     def candidates(self, mention):
         return set(self.sorted_candidates(mention))
@@ -274,3 +369,10 @@ def rank_scored(scored):
             previous = score
         candidates[cand] = 1/rank
     return candidates
+
+
+def L2normalize(vector):
+    '''
+    Divide all components by the vector's magnitude.
+    '''
+    vector /= np.sqrt((vector**2).sum())
