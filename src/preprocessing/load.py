@@ -22,23 +22,28 @@ dict_loader = {
     'ncbi-disease': parse_MEDIC_terminology,
 }
 
-def load_data(conf, dataset, subset):
+def load_data(conf, subset, terminology=None):
     '''
     Pick and parse the right corpus or dict file.
 
     The parameter subset is one of "train", "dev", "test",
     and "dict".
     '''
-    loader = dict_loader if subset == 'dict' else corpus_loader
+    dataset = conf.general.dataset
     fn = conf[dataset]['{}_fn'.format(subset)]
-    return loader[dataset](fn)
+    if subset == 'dict':
+        return dict_loader[dataset](fn)
+    else:
+        if terminology is None:
+            terminology = load_dict(conf)
+        return corpus_loader[dataset](fn, terminology)
 
 
-def load_dict(conf, dataset):
+def load_dict(conf):
     '''
     Read a dict file into a Terminology instance.
     '''
-    return Terminology(load_data(conf, dataset, 'dict'))
+    return Terminology(load_data(conf, 'dict'))
 
 
 def itermentions(corpus):

@@ -46,10 +46,11 @@ def _itermentions(conf, data):
         else:
             score = None
             ids = []
+        all_ids = set().union(*data.ids[start:end])
+        reachable = any(id_ in refs for id_ in all_ids)
         id_ = _disambiguate(conf, ids, score)
-        reachable = len(refs) == 1 and any(data.ids[i].intersection(refs[0])
-                                           for i in range(start, end))
-        yield (*annotation, refs, id_, len(ids), reachable)
+        correct = id_ in refs
+        yield (*annotation, refs, id_, correct, len(ids), reachable)
 
 
 def _disambiguate(conf, ids, score):
@@ -69,6 +70,7 @@ class TSVWriter:
         mention text
         reference ID(s)
         predicted ID
+        correct (prediction matches reference)
         number of IDs for the top-ranked candidate name
         reachable (reference ID is among the candidates)
     '''
@@ -85,10 +87,7 @@ class TSVWriter:
             self.close = lambda: None
 
     def _write(self, entry):
-        # Format the ref IDs.
-        fields = list(entry)
-        fields[4] = '+'.join('|'.join(comp) for comp in fields[4])
-        self._writer.writerow(fields)
+        self._writer.writerow(entry)
 
     def _close(self):
         self._file.close()
@@ -103,7 +102,6 @@ class Evaluator:
         self.total = 0
         self.unreachable = 0
         self.ambiguous = 0
-        self.compound = 0
         self.nocandidates = 0
 
     @property
@@ -123,14 +121,10 @@ class Evaluator:
 
     def update(self, entry):
         '''Update counts.'''
-        *_, refs, id_, n_ids, reachable = entry
+        *_, correct, n_ids, reachable = entry
         self.total += 1
+        self.correct += correct
         self.unreachable += not reachable
-        if len(refs) > 1:
-            # No chance to get these right.
-            self.compound += 1
-        elif id_ in refs[0]:
-            self.correct += 1
         if n_ids == 0:
             self.nocandidates += 1
         elif n_ids > 1:
@@ -138,7 +132,6 @@ class Evaluator:
 
     def summary(self, outfile):
         '''Write an evaluation summary to outfile.'''
-        labels = '''accuracy correct total
-                    unreachable nocandidates ambiguous compound'''.split()
-        for label in labels:
+        labels = 'accuracy correct total unreachable nocandidates ambiguous'
+        for label in labels.split():
             outfile.write('{:12} {:5}\n'.format(label, getattr(self, label)))

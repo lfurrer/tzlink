@@ -103,8 +103,7 @@ class _BaseCandidateGenerator:
                 yield cand, score, label
 
     def _positive_samples(self, ref_ids):
-        ids = self._select_ids(ref_ids)
-        positive = self.terminology.names(ids)
+        positive = self.terminology.names(ref_ids)
         return positive
 
     def candidates(self, mention):
@@ -132,16 +131,6 @@ class _BaseCandidateGenerator:
         '''
         for m in mentions:
             yield self.scored_candidates(m)
-
-    @staticmethod
-    def _select_ids(ids):
-        '''
-        Account for alternative and compound IDs in the reference.
-        '''
-        if len(ids) > 1:
-            # Don't generate positive examples for compound concepts.
-            return set()
-        return ids[0]
 
 
 class _MultiGenerator(_BaseCandidateGenerator):

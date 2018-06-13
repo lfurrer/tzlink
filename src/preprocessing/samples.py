@@ -44,7 +44,7 @@ class Sampler:
         logging.info('loading pretrained embeddings...')
         self.voc_index, self.emb_matrix = load_wemb(self.conf)
         logging.info('loading terminology...')
-        self.terminology = load_dict(self.conf, self.conf.general.dataset)
+        self.terminology = load_dict(self.conf)
         logging.info('loading vectorizer...')
         self.vectorizer = Vectorizer(self.conf, self.voc_index)
         logging.info('loading candidate generator...')
@@ -76,7 +76,7 @@ class Sampler:
         '''
         Create vectorized samples with labels for training or prediction.
         '''
-        corpus = load_data(self.conf, self.conf.general.dataset, subset)
+        corpus = load_data(self.conf, subset, self.terminology)
         return self._samples(corpus, oracle)
 
     def _samples(self, corpus, oracle):
@@ -84,10 +84,10 @@ class Sampler:
         weights = []
         samples = []  # holds 5-tuples <x_q, x_a, scores, y, ids>
         for item, numbers in self._itercandidates(corpus, oracle):
-            (mention, ref_ids), occs = item
+            (mention, ref), occs = item
             offset, length = len(samples), len(numbers)
             for occ in occs:
-                occurrences.append((*occ, mention, ref_ids, offset, offset+length))
+                occurrences.append((*occ, mention, ref, offset, offset+length))
             samples.extend(numbers)
             weights.extend(len(occs) for _ in range(length))
         data = DataSet(occurrences, weights, *zip(*samples))
@@ -97,7 +97,7 @@ class Sampler:
 
     def _itercandidates(self, corpus, oracle):
         logging.info('loading corpus...')
-        mentions = _deduplicated(corpus, self.terminology)
+        mentions = _deduplicated(corpus)
         workers = self.conf.candidates.workers
         logging.info('generating candidates with %d workers...', workers)
         if workers >= 1:
@@ -131,11 +131,11 @@ class DataSet:
         x: the list [x_q, x_a]
         weights: counts of repeated samples (1D numpy array)
         scores: store the predictions here
-        ids: candidate IDs (list of list of str)
+        ids: candidate IDs (list of set of str)
             Has the same length as each of the sample
             vectors (x_q, x_a, y). Each element is a
-            list of strings. Most of the time, the
-            nested list has one member only, except for
+            set of strings. Most of the time, the
+            nested set has one member only, except for
             the cases where a candidate name maps to
             multiple concepts.
         occs: a list of occurrence-specific data
@@ -163,25 +163,17 @@ class DataSet:
         return [self.x_q, self.x_a, self.x_scores]
 
 
-def _deduplicated(corpus, terminology):
+def _deduplicated(corpus):
     mentions = defaultdict(list)
     for doc in corpus:
         docid = doc['docid']
         for sec in doc['sections']:
             offset = sec['offset']
             for mention in sec['mentions']:
-                key = mention['text'], _canonical_ids(mention['id'], terminology)
+                key = mention['text'], mention['id']
                 occ = docid, offset + mention['start'], offset + mention['end']
                 mentions[key].append(occ)
     return mentions
-
-
-def _canonical_ids(ids, terminology):
-    canonical = tuple(
-        frozenset().union(*(terminology.canonical_ids(alt) for alt in comp))
-        for comp in ids
-    )
-    return canonical
 
 
 # Global variables are necessary to allow Pool workers to re-use the same
