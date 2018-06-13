@@ -52,7 +52,7 @@ def _parse_document(lines, terminology):
             'end': int(cache_mention[2]),
             'text': cache_mention[3],
             'type': cache_mention[4],
-            'id': RefID(cache_mention[5], terminology)}
+            'id': _ref_id(cache_mention[5], terminology)}
         if cache_dict['start'] < abstract_offset:
             title_mentions.append(cache_dict)
             text = title
@@ -78,6 +78,21 @@ def _parse_document(lines, terminology):
     ]
     doc = {'docid': docid, 'sections': sections}
     return doc
+
+
+_ref_id_cache = {}
+
+def _ref_id(ref, terminology):
+    '''
+    Factory function for avoiding duplicate instantiation.
+
+    This allows detecting repeated mentions in the corpus.
+    '''
+    try:
+        return _ref_id_cache[ref, terminology]
+    except KeyError:
+        existing = _ref_id_cache[ref, terminology] = RefID(ref, terminology)
+        return existing
 
 
 class RefID:
