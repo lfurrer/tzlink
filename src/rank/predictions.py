@@ -22,6 +22,9 @@ def handle_predictions(conf, dump, evaluate, data):
     '''
     Write predictions to a TSV file and/or print evaluation figures.
     '''
+    if dump:
+        data.occs.sort()  # put in corpus order (easier comparison across runs)
+
     if evaluate is True:
         evaluate = [sys.stdout]
     elif evaluate is False:
@@ -62,18 +65,20 @@ def _disambiguate(conf, ids, score):
 class TSVWriter:
     '''
     Write a TSV line for each mention.
-
-    The fields are:
-        doc ID
-        start (document character offset)
-        end (ditto)
-        mention text
-        reference ID(s)
-        predicted ID
-        correct (prediction matches reference)
-        number of IDs for the top-ranked candidate name
-        reachable (reference ID is among the candidates)
     '''
+
+    fields = (
+        'DOC_ID',
+        'START',      # document character offset
+        'END',        # ditto
+        'MENTION',    # text
+        'REF_ID',     # 1 or more
+        'PRED_ID',
+        'CORRECT',    # prediction matches reference
+        'N_IDS',      # number of IDs for the top-ranked candidate name
+        'REACHABLE',  # reference ID is among the candidates
+    )
+
     def __init__(self, conf, enabled):
         if enabled:
             self.write = self._write
@@ -81,6 +86,7 @@ class TSVWriter:
             self._file = smart_open(conf.logging.prediction_fn, 'w')
             self._writer = csv.writer(self._file, quotechar=None,
                                       delimiter='\t', lineterminator='\n')
+            self.write(self.fields)  # add a header line
         else:
             # Dummy mode.
             self.write = lambda _: None
