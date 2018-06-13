@@ -42,24 +42,42 @@ def handle_predictions(conf, dump, evaluate, data):
 
 def _itermentions(conf, data):
     for *annotation, refs, start, end in data.occs:
-        if start != end:
-            i = max(range(start, end), key=data.scores.__getitem__)
-            score = data.scores[i]
-            ids = data.ids[i]
-        else:
-            score = None
-            ids = []
-        all_ids = set().union(*data.ids[start:end])
-        reachable = any(id_ in refs for id_ in all_ids)
-        id_ = _disambiguate(conf, ids, score)
+        all_ids = data.ids[start:end]
+        scored = sorted(zip(data.scores[start:end], all_ids), reverse=True)
+        id_ = _disambiguate(conf, scored)
         correct = id_ in refs
-        yield (*annotation, refs, id_, correct, len(ids), reachable)
+        n_ids = len(scored) and len(scored[0][1])
+        reachable = any(id_ in refs for id_ in set().union(*all_ids))
+        yield (*annotation, refs, id_, correct, n_ids, reachable)
 
 
-def _disambiguate(conf, ids, score):
-    if not ids or score < conf.rank.min_score:
+def _disambiguate(conf, scored):
+    try:
+        score, top_ids = scored[0]
+    except IndexError:
+        # No candidates.
         return NIL
-    return min(ids)  # just pick one -- use min() to be deterministic
+
+    if score < conf.rank.min_score:
+        # Score too low.
+        return NIL
+
+    if len(top_ids) == 1:
+        # Unambiguous case.
+        return next(iter(top_ids))
+
+    # Look for cues in the lower-ranked candidates.
+    for _, ids in scored[1:]:
+        common = top_ids.intersection(ids)
+        if common:
+            # Another name of the top-ranked concept(s) was among the
+            # candidates. Remove the concepts to which it doesn't map.
+            top_ids = common
+            if len(top_ids) == 1:
+                break
+
+    # If still ambiguous, pick the lowest-ordering ID to be deterministic.
+    return min(top_ids)
 
 
 class TSVWriter:
