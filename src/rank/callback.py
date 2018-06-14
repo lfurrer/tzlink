@@ -25,7 +25,7 @@ class EarlyStoppingRankingAccuracy(Callback):
             with validation data.
         dumpfn: path to save the best model.
     '''
-    def __init__(self, conf, val_data, dumpfn=None):
+    def __init__(self, conf, val_data, dumpfn):
         super().__init__()
 
         self.conf = conf
@@ -54,8 +54,7 @@ class EarlyStoppingRankingAccuracy(Callback):
                 self.model.stop_training = True
         if current > self.best:
             self.best = current
-            if self.dumpfn is not None:
-                self.model.save(self.dumpfn)
+            self.model.save(self.dumpfn)
 
     def on_train_end(self, logs=None):
         if self.stopped_epoch > 0:

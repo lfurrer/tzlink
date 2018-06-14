@@ -10,6 +10,7 @@ Convolutional Neural Network for ranking mention-candidate pairs.
 
 
 import logging
+import tempfile
 
 from keras.models import Model, load_model
 from keras.layers import Input, Dense, Concatenate, Layer
@@ -28,23 +29,25 @@ def run(conf, train=True, predict=True, test=True, dumpfn=None):
     if not any([train, predict, test]):
         logging.warning('nothing to do')
         return
-    if dumpfn is None and not train:
-        raise ValueError('no model to train or load')
+    if dumpfn is None:
+        if not train:
+            raise ValueError('no model to train or load')
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            dumpfn = f.name
 
     sampler = samples.Sampler(conf)
     logging.info('preprocessing validation data...')
     val_data = sampler.prediction_samples()
     if train:
-        model = _train(conf, sampler, val_data, dumpfn)
-    else:
-        model = _load(dumpfn)
+        _train(conf, sampler, val_data, dumpfn)
+    model = _load(dumpfn)
     if predict or test:
         val_data.scores = model.predict(val_data.x,
                                         batch_size=conf.rank.batch_size)
         handle_predictions(conf, predict, test, val_data)
 
 
-def _train(conf, sampler, val_data, dumpfn=None):
+def _train(conf, sampler, val_data, dumpfn):
     logging.info('compiling model architecture...')
     model = _create_model(conf, sampler.emb_matrix)
     logging.info('preprocessing training data...')
@@ -57,7 +60,6 @@ def _train(conf, sampler, val_data, dumpfn=None):
               epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     logging.info('done training.')
-    return model
 
 
 def _load(fn):
