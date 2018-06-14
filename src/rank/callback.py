@@ -23,14 +23,14 @@ class EarlyStoppingRankingAccuracy(Callback):
         conf: a conf.config.Config instance with settings.
         val_data: a preprocessing.samples.DataSet instance
             with validation data.
+        dumpfn: path to save the best model.
     '''
-    def __init__(self,
-                 conf,
-                 val_data):
+    def __init__(self, conf, val_data, dumpfn=None):
         super().__init__()
 
         self.conf = conf
         self.val_data = val_data
+        self.dumpfn = dumpfn
 
         self.wait = 0
         self.stopped_epoch = 0
@@ -46,13 +46,16 @@ class EarlyStoppingRankingAccuracy(Callback):
         current = self.evaluate()
         logging.info('Ranking accuracy: %g', current)
         if current - self.conf.stop.min_delta > self.best:
-            self.best = current
             self.wait = 0
         else:
             self.wait += 1
             if self.wait >= self.conf.stop.patience:
                 self.stopped_epoch = epoch
                 self.model.stop_training = True
+        if current > self.best:
+            self.best = current
+            if self.dumpfn is not None:
+                self.model.save(self.dumpfn)
 
     def on_train_end(self, logs=None):
         if self.stopped_epoch > 0:

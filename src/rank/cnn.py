@@ -35,9 +35,7 @@ def run(conf, train=True, predict=True, test=True, dumpfn=None):
     logging.info('preprocessing validation data...')
     val_data = sampler.prediction_samples()
     if train:
-        model = _train(conf, sampler, val_data)
-        if dumpfn is not None:
-            _dump(model, dumpfn)
+        model = _train(conf, sampler, val_data, dumpfn)
     else:
         model = _load(dumpfn)
     if predict or test:
@@ -46,13 +44,13 @@ def run(conf, train=True, predict=True, test=True, dumpfn=None):
         handle_predictions(conf, predict, test, val_data)
 
 
-def _train(conf, sampler, val_data):
+def _train(conf, sampler, val_data, dumpfn=None):
     logging.info('compiling model architecture...')
     model = _create_model(conf, sampler.emb_matrix)
     logging.info('preprocessing training data...')
     tr_data = sampler.training_samples()
     logging.info('training CNN...')
-    earlystopping = EarlyStoppingRankingAccuracy(conf, val_data)
+    earlystopping = EarlyStoppingRankingAccuracy(conf, val_data, dumpfn)
     model.fit(tr_data.x, tr_data.y, sample_weight=tr_data.weights,
               validation_data=(val_data.x, val_data.y, val_data.weights),
               callbacks=[earlystopping],
@@ -60,10 +58,6 @@ def _train(conf, sampler, val_data):
               batch_size=conf.rank.batch_size)
     logging.info('done training.')
     return model
-
-
-def _dump(model, fn):
-    model.save(fn)
 
 
 def _load(fn):
