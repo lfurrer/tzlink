@@ -93,7 +93,7 @@ def _embedding_layer(conf, matrix=None):
                           embedding_dim,
                           weights=[matrix],
                           input_length=conf.emb.sample_size,
-                          trainable=False)
+                          trainable=conf.emb.trainable)
     else:
         layer = Embedding(conf.emb.embedding_voc,
                           conf.emb.embedding_dim,
