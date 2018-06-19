@@ -49,7 +49,7 @@ def run(conf, train=True, predict=True, test=True, dumpfn=None):
 
 def _train(conf, sampler, val_data, dumpfn):
     logging.info('compiling model architecture...')
-    model = _create_model(conf, sampler.emb_matrix)
+    model = _create_model(conf, sampler.emb_matrices)
     logging.info('preprocessing training data...')
     tr_data = sampler.training_samples()
     logging.info('training CNN...')
@@ -69,19 +69,30 @@ def _load(fn):
     return model
 
 
-def _create_model(conf, embeddings=None):
-    inp_q, inp_a = (Input(shape=(conf.emb.sample_size,)) for _ in range(2))
+def _create_model(conf, emb_matrices=None):
+    inp_q, inp_a = [], []
     inp_score = Input(shape=(1,))  # candidate score
-    emb = _embedding_layer(conf, embeddings)
-    sem_q = _semantic_layers(conf, emb(inp_q))
-    sem_a = _semantic_layers(conf, emb(inp_a))
+    emb_q, emb_a = [], []
+    for matrix in emb_matrices or [None]:
+        emb = _embedding_layer(conf, matrix)
+        for i, e in ((inp_q, emb_q), (inp_a, emb_a)):
+            inp = Input(shape=(conf.emb.sample_size,))
+            i.append(inp)
+            e.append(emb(inp))
+    if len(emb_q) > 1:
+        emb_q, emb_a = (Concatenate()(e) for e in (emb_q, emb_a))
+    else:
+        emb_q, emb_a = emb_q[0], emb_a[0]
+    sem_q = _semantic_layers(conf, emb_q)
+    sem_a = _semantic_layers(conf, emb_a)
     v_sem = PairwiseSimilarity()([sem_q, sem_a])
     join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_score])
     hidden_layer = Dense(units=1+2*conf.rank.n_kernels,
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(inp_q, inp_a, inp_score), outputs=logistic_regression)
+    model = Model(inputs=(*inp_q, *inp_a, inp_score),
+                  outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
 

@@ -15,11 +15,13 @@ from string import punctuation
 import numpy as np
 
 
-def get_tokenizer(conf):
+def get_tokenizer(econf):
     '''
     Select and instantiate a tokenizer.
     '''
-    return _get_tokenizer(conf.emb.tokenizer.lower(), conf.emb.tokenizer_model)
+    name = econf.tokenizer.lower()
+    model = getattr(econf, "tokenizer_model", None)
+    return _get_tokenizer(name, model)
 
 
 def _get_tokenizer(name, model):
@@ -55,11 +57,11 @@ class Vectorizer:
     PAD = 0  # all zeros for padding
     UNK = 1  # random values for "the unknown word"
 
-    def __init__(self, conf, vocab):
+    def __init__(self, econf, vocab):
         self.vocab = vocab
-        self.length = conf.emb.sample_size  # max number of tokens per vector
-        self._tokenize = get_tokenizer(conf)
-        if conf.emb.vectorizer_cache:  # trade memory for speed?
+        self.length = econf.sample_size  # max number of tokens per vector
+        self._tokenize = get_tokenizer(econf)
+        if econf.vectorizer_cache:  # trade memory for speed?
             self._cache = {}
         else:
             self.vectorize = self._vectorize  # hide the cache wrapper method

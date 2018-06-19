@@ -353,12 +353,12 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
     N best candidates based on phrase-vector similarity.
     '''
 
-    def __init__(self, shared, size=20, comb='sum'):
+    def __init__(self, shared, size=20, comb='sum', emb='emb'):
         super().__init__(shared)
         self.size = size
         self.combine = getattr(np, comb)
-        self._vectorizer = shared.vectorizer
-        self._wv = shared.emb_matrix
+        self._vectorizer = shared.emb[emb].vectorizer
+        self._wv = shared.emb[emb].emb_matrix
         self._pv = self._create_pv()
 
     def _create_pv(self):

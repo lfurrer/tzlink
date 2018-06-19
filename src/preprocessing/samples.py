@@ -11,7 +11,7 @@ Create training samples from input documents.
 
 import logging
 import multiprocessing as mp
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import numpy as np
 
@@ -19,6 +19,7 @@ from .word_embeddings import load as load_wemb
 from .load import load_data, load_dict
 from .vectorize import Vectorizer
 from ..candidates.generate_candidates import candidate_generator
+from ..util.util import CacheDict
 
 
 class Sampler:
@@ -32,23 +33,29 @@ class Sampler:
     def __init__(self, conf):
         self.conf = conf
 
-        self.voc_index = None
-        self.emb_matrix = None
         self.terminology = None
-        self.vectorizer = None
+        self.emb = CacheDict(self._load_embeddings)
+        self.vectorizers = None
+        self.emb_matrices = None
         self.cand_gen = None
         self._pool = None
         self._load()
 
     def _load(self):
-        logging.info('loading pretrained embeddings...')
-        self.voc_index, self.emb_matrix = load_wemb(self.conf)
         logging.info('loading terminology...')
         self.terminology = load_dict(self.conf)
-        logging.info('loading vectorizer...')
-        self.vectorizer = Vectorizer(self.conf, self.voc_index)
+        self.vectorizers, self.emb_matrices = \
+            zip(*(self.emb[emb] for emb in self.conf.rank.embeddings))
         logging.info('loading candidate generator...')
         self.cand_gen = candidate_generator(self)
+
+    def _load_embeddings(self, which):
+        econf = self.conf[which]
+        logging.info('loading pretrained embeddings...')
+        voc_index, emb_matrix = load_wemb(econf)
+        logging.info('loading vectorizer...')
+        vectorizer = Vectorizer(econf, voc_index)
+        return EmbeddingInfo(vectorizer, emb_matrix)
 
     @property
     def pool(self):
@@ -57,7 +64,7 @@ class Sampler:
             logging.info('initializing multiprocessing pool')
             self._pool = mp.Pool(self.conf.candidates.workers,
                                  initializer=_set_global_instances,
-                                 initargs=[self.cand_gen, self.vectorizer])
+                                 initargs=[self.cand_gen, self.vectorizers])
         return self._pool
 
     def training_samples(self):
@@ -106,7 +113,7 @@ class Sampler:
             vectorized = self.pool.imap(_worker_task, chunks)
             vectorized = (elem for chunk in vectorized for elem in chunk)
         else:
-            vectorized = _task(mentions, oracle, self.cand_gen, self.vectorizer)
+            vectorized = _task(mentions, oracle, self.cand_gen, self.vectorizers)
         yield from zip(mentions.items(), vectorized)
 
     @staticmethod
@@ -121,14 +128,22 @@ class Sampler:
             yield chunk
 
 
+EmbeddingInfo = namedtuple('EmbeddingInfo', 'vectorizer emb_matrix')
+
+
 class DataSet:
     '''
     Container for original and vectorized input/output data.
 
     Attributes:
-        x_q, x_a, y: vocabulary vectors of question and
-            answer side, and the labels (2D numpy arrays)
-        x: the list [x_q, x_a]
+        x_q, x_a: vocabulary vectors of question and answer
+            side (lists of 2D numpy arrays)
+            If multiple embeddings are used, then each list
+            contains multiple arrays.
+        x_scores: confidence scores from candidate generation
+            (1D numpy array)
+        x: the list [x_q_1, ... x_q_n, x_a_1, ... x_a_n, x_scores]
+        y: the labels (2D numpy array)
         weights: counts of repeated samples (1D numpy array)
         scores: store the predictions here
         ids: candidate IDs (list of set of str)
@@ -148,8 +163,8 @@ class DataSet:
         # Original data.
         self.occs = occs
         # Vectorized data.
-        self.x_q = np.array(x_q)
-        self.x_a = np.array(x_a)
+        self.x_q = [np.array(x) for x in zip(*x_q)]
+        self.x_a = [np.array(x) for x in zip(*x_a)]
         self.x_scores = np.array(x_scores)
         self.y = np.array(y)
         self.weights = np.array(weights)  # repetition counts
@@ -160,7 +175,7 @@ class DataSet:
     @property
     def x(self):
         '''List of input tensors.'''
-        return [self.x_q, self.x_a, self.x_scores]
+        return [*self.x_q, *self.x_a, self.x_scores]
 
 
 def _deduplicated(corpus):
@@ -180,25 +195,25 @@ def _deduplicated(corpus):
 # instances across all tasks.
 # https://stackoverflow.com/a/10118250
 CAND_GEN = None
-VECTORIZER = None
+VECTORIZERS = None
 
-def _set_global_instances(cand_gen, vectorizer):
+def _set_global_instances(cand_gen, vectorizers):
     global CAND_GEN
-    global VECTORIZER
+    global VECTORIZERS
     CAND_GEN = cand_gen
-    VECTORIZER = vectorizer
+    VECTORIZERS = vectorizers
 
 
 def _worker_task(arg):
-    return list(_task(*arg, CAND_GEN, VECTORIZER))
+    return list(_task(*arg, CAND_GEN, VECTORIZERS))
 
 
-def _task(items, oracle, cand_gen, vectorizer):
+def _task(items, oracle, cand_gen, vectorizers):
     for mention, samples in cand_gen.samples_many(items, oracle):
-        vec_q = vectorizer.vectorize(mention)
+        vec_q = [v.vectorize(mention) for v in vectorizers]
         data = []
         for cand, score, label in samples:
-            vec_a = vectorizer.vectorize(cand)
+            vec_a = [v.vectorize(cand) for v in vectorizers]
             data.append((
                 vec_q,
                 vec_a,

@@ -13,11 +13,11 @@ import numpy as np
 from gensim.models.keyedvectors import KeyedVectors
 
 
-def load(conf):
+def load(econf):
     '''
     Load embeddings from binary and create a lookup table.
     '''
-    fn = conf.emb.embedding_fn
+    fn = econf.embedding_fn
     wv = KeyedVectors.load_word2vec_format(fn, binary=fn.endswith('.bin'))
     lookup = {w: i+2 for i, w in enumerate(wv.index2word)}
     # Add two rows in the beginning: one for padding and one for unknown words.

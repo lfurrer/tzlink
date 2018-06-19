@@ -14,6 +14,7 @@ import os
 import sys
 import gzip
 import subprocess as sp
+from collections import defaultdict
 from contextlib import contextmanager
 
 from ..conf.config import Config
@@ -85,3 +86,17 @@ def get_commit_info(spec, fallback):
     if compl.returncode == 0:
         return compl.stdout.decode('utf8').strip()
     return '<no commit {}>'.format(fallback)
+
+
+class CacheDict(defaultdict):
+    '''
+    A default dictionary with a 1-argument factory.
+    '''
+
+    __slots__ = ()
+
+    def __missing__(self, key):
+        if self.default_factory is None:
+            raise KeyError(key)
+        self[key] = value = self.default_factory(key)
+        return value
