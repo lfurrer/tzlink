@@ -43,17 +43,16 @@ class Config(_Namespace):
         'path/to/training.txt'
     '''
 
-    # Default values determined at runtime.
-    DYNAMIC_DEFAULTS = {
-        'rootpath': os.path.realpath(os.path.join(HERE, '..', '..')),
-        'timestamp': time.strftime('%Y%m%d-%H%M%S'),
-    }
-
     def __init__(self, *filenames):
         '''
         Override the defaults with any number of files.
         '''
-        parser = cp.ConfigParser(defaults=self.DYNAMIC_DEFAULTS,
+        # Default values determined at runtime.
+        dynamic_defaults = {
+            'rootpath': os.path.realpath(os.path.join(HERE, '..', '..')),
+            'timestamp': time.strftime('%Y%m%d-%H%M%S'),
+        }
+        parser = cp.ConfigParser(defaults=dynamic_defaults,
                                  interpolation=cp.ExtendedInterpolation(),
                                  empty_lines_in_values=False)
         parser.read([DEFAULTS, *filenames])
@@ -61,14 +60,19 @@ class Config(_Namespace):
         self._setup_logging()
 
         # Publicly accessible attribute: serialized config file.
-        self.dump = self._save_dump(parser)
+        self.dump = self._save_dump(parser, dynamic_defaults)
 
     @staticmethod
-    def _save_dump(parser):
+    def _save_dump(parser, dynamic_defaults):
         '''Save a serialization of this configuration.'''
         with io.StringIO() as f:
             parser.write(f)
-            return f.getvalue()
+            dump = f.getvalue()
+        # Remove the dynamically created default values.
+        for key, value in dynamic_defaults.items():
+            line = '{} = {}\n'.format(key, value)
+            dump = dump.replace(line, '', 1)
+        return dump
 
     def _store(self, items):
         for sec_name, sec_proxy in items:
