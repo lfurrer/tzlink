@@ -87,17 +87,16 @@ class Sampler:
         return self._samples(corpus, oracle)
 
     def _samples(self, corpus, oracle):
-        occurrences = []
+        ranges = []
         weights = []
-        samples = []  # holds 5-tuples <x_q, x_a, scores, y, ids>
+        samples = []  # holds 6-tuples <x_q, x_a, scores, y, cands, ids>
         for item, numbers in self._itercandidates(corpus, oracle):
             (mention, ref), occs = item
             offset, length = len(samples), len(numbers)
-            for occ in occs:
-                occurrences.append((*occ, mention, ref, offset, offset+length))
+            ranges.append((offset, offset+length, mention, ref, occs))
             samples.extend(numbers)
             weights.extend(len(occs) for _ in range(length))
-        data = DataSet(occurrences, weights, *zip(*samples))
+        data = DataSet(ranges, weights, *zip(*samples))
         logging.info('generated %d pair-wise samples (%d with duplicates)',
                      len(data.y), sum(data.weights))
         return data
@@ -146,22 +145,25 @@ class DataSet:
         y: the labels (2D numpy array)
         weights: counts of repeated samples (1D numpy array)
         scores: store the predictions here
+        candidates: candidate name of each sample (list of str)
+            Holds the same information as x_a, but using a
+            human-readable plain-text version.
         ids: candidate IDs (list of set of str)
-            Has the same length as each of the sample
-            vectors (x_q, x_a, y). Each element is a
-            set of strings. Most of the time, the
-            nested set has one member only, except for
-            the cases where a candidate name maps to
-            multiple concepts.
-        occs: a list of occurrence-specific data
-            for each mention. Each entry is a 7-tuple
-            <docid, start, end, mention, refs, i, j>
-            with i/j being the start/end indices wrt.
-            to the rows of the sample vectors
+            A set of IDs for each sample. Most of the time,
+            the set has one member only, except for the
+            cases where a candidate name maps to multiple
+            concepts.
+        mentions: a list of mention-specific data for each
+            candidate set. Each entry is a 5-tuple
+                <i, j, mention, refs, occs>
+            where i/j are the start/end indices wrt. to
+            the rows of the sample vectors and occs is a
+            list of <docid, start, end> triples identifying
+            the occurrences in the corpus.
     '''
-    def __init__(self, occs, weights, x_q, x_a, x_scores, y, ids):
+    def __init__(self, mentions, weights, x_q, x_a, x_scores, y, cands, ids):
         # Original data.
-        self.occs = occs
+        self.mentions = mentions
         # Vectorized data.
         self.x_q = [np.array(x) for x in zip(*x_q)]
         self.x_a = [np.array(x) for x in zip(*x_a)]
@@ -170,6 +172,7 @@ class DataSet:
         self.weights = np.array(weights)  # repetition counts
         self.scores = None  # hook for predictions
         # A set of candidate IDs for each sample.
+        self.candidates = cands
         self.ids = ids
 
     @property
@@ -219,6 +222,7 @@ def _task(items, oracle, cand_gen, vectorizers):
                 vec_a,
                 score,
                 (float(label),),
+                cand,
                 cand_gen.terminology.ids([cand]),
             ))
         yield data

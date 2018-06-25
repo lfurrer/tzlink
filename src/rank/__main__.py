@@ -21,7 +21,10 @@ def main():
              '(instead of loading a previously trained one)')
     ap.add_argument(
         '-p', '--predict', action='store_true',
-        help='use the model to produce rankings')
+        help='produce a TSV with occurrence-wise predictions')
+    ap.add_argument(
+        '-d', '--detailed', action='store_true',
+        help='produce a rich output file for inspecting ranking decisions')
     ap.add_argument(
         '-r', '--record', action='store_true',
         help='create a summary with results and config info')

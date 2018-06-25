@@ -22,13 +22,10 @@ from .predictions import handle_predictions
 from .callback import EarlyStoppingRankingAccuracy
 
 
-def run(conf, train=True, predict=True, test=True, dumpfn=None):
+def run(conf, train=True, dumpfn=None, **evalparams):
     '''
     Run the CNN (incl. preprocessing).
     '''
-    if not any([train, predict, test]):
-        logging.warning('nothing to do')
-        return
     if dumpfn is None:
         if not train:
             raise ValueError('no model to train or load')
@@ -40,11 +37,14 @@ def run(conf, train=True, predict=True, test=True, dumpfn=None):
     val_data = sampler.prediction_samples()
     if train:
         _train(conf, sampler, val_data, dumpfn)
+    logging.info('load best model...')
     model = _load(dumpfn)
-    if predict or test:
-        val_data.scores = model.predict(val_data.x,
-                                        batch_size=conf.rank.batch_size)
-        handle_predictions(conf, predict, test, val_data)
+    logging.info('predict scores for validation data...')
+    val_data.scores = model.predict(val_data.x,
+                                    batch_size=conf.rank.batch_size)
+    logging.info('evaluate and/or serialize...')
+    handle_predictions(conf, val_data, **evalparams)
+    logging.info('done.')
 
 
 def _train(conf, sampler, val_data, dumpfn):

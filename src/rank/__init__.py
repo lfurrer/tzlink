@@ -23,6 +23,6 @@ def run(config, record=False, **kwargs):
     recorder = Recorder(conf)
 
     from . import cnn
-    cnn.run(conf, test=[sys.stdout, recorder.results], **kwargs)
+    cnn.run(conf, evaluate=[sys.stdout, recorder.results], **kwargs)
     if record:
         recorder.dump()
