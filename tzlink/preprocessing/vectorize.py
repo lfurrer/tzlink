@@ -5,7 +5,7 @@
 
 
 '''
-Convert text to integer vectors.
+Convert text to numerical vectors.
 '''
 
 
@@ -13,6 +13,26 @@ import re
 from string import punctuation
 
 import numpy as np
+from gensim.models.keyedvectors import KeyedVectors
+
+
+def load_wemb(econf):
+    '''
+    Load embeddings from disk and create a lookup table.
+    '''
+    fn = econf.embedding_fn
+    if fn.endswith('.kv'):
+        wv = KeyedVectors.load(fn, mmap='r')
+    else:
+        wv = KeyedVectors.load_word2vec_format(fn, binary=fn.endswith('.bin'))
+    lookup = {w: i+2 for i, w in enumerate(wv.index2word)}
+    # Add two rows in the beginning: one for padding and one for unknown words.
+    dim = wv.syn0.shape[1]
+    dtype = wv.syn0.dtype
+    padding = np.zeros(dim, dtype)
+    unknown = np.random.standard_normal(dim).astype(dtype)
+    matrix = np.concatenate([[padding, unknown], wv.syn0])
+    return lookup, matrix
 
 
 def get_tokenizer(econf):
@@ -50,7 +70,7 @@ def _get_tokenizer(name, model):
 
 class Vectorizer:
     '''
-    Converter text -> vector.
+    Converter text -> vector of integers.
     '''
 
     # Reserved rows in the embedding matrix.

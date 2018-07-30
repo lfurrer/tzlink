@@ -15,9 +15,8 @@ from collections import defaultdict, namedtuple
 
 import numpy as np
 
-from .word_embeddings import load as load_wemb
 from .load import load_data, load_dict
-from .vectorize import Vectorizer
+from .vectorize import load_wemb, Vectorizer
 from ..candidates.generate_candidates import candidate_generator
 from ..util.util import CacheDict
 
