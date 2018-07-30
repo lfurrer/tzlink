@@ -25,14 +25,50 @@ def load_wemb(econf):
         wv = KeyedVectors.load(fn, mmap='r')
     else:
         wv = KeyedVectors.load_word2vec_format(fn, binary=fn.endswith('.bin'))
-    lookup = {w: i+2 for i, w in enumerate(wv.index2word)}
+    vocab, matrix = _adapt_mapping(econf, wv)
+
     # Add two rows in the beginning: one for padding and one for unknown words.
-    dim = wv.syn0.shape[1]
-    dtype = wv.syn0.dtype
+    dim = matrix.shape[1]
+    dtype = matrix.dtype
     padding = np.zeros(dim, dtype)
     unknown = np.random.standard_normal(dim).astype(dtype)
-    matrix = np.concatenate([[padding, unknown], wv.syn0])
+    matrix = np.concatenate([[padding, unknown], matrix])
+    lookup = {w: i for i, w in enumerate(vocab, 2)}
     return lookup, matrix
+
+
+def _adapt_mapping(econf, wv):
+    '''
+    Modify the mapping of words to vectors.
+    '''
+    prep = get_preprocessing(econf)
+    if prep is None:
+        return wv.index2word, wv.syn0
+
+    vocab = {}
+    for word, entry in wv.vocab.items():
+        modified = prep(word)
+        if modified not in vocab or vocab[modified].count < entry.count:
+            vocab[modified] = entry
+    indices = [e.index for e in vocab.values()]
+    return vocab.keys(), wv.syn0[indices]
+
+
+def get_preprocessing(econf):
+    '''
+    Select and instantiate a preprocessor.
+    '''
+    name = econf.preprocess.lower()
+    if name == 'none':
+        return None
+    if name == 'stem':
+        from .stem import PorterStemmer
+        stemmer = PorterStemmer()
+        pattern = re.compile(r'\w+')
+        def _stem(text):
+            return pattern.sub(lambda m: stemmer.stem(m.group(0)), text)
+        return _stem
+    raise ValueError('unknown preprocessing: {}'.format(name))
 
 
 def get_tokenizer(econf):
@@ -66,6 +102,7 @@ def _get_tokenizer(name, model):
             tokens = bpe.segment(pretok)
             return tokens.split()
         return _tokenize
+    raise ValueError('unknown tokenizer: {}'.format(name))
 
 
 class Vectorizer:
@@ -80,6 +117,7 @@ class Vectorizer:
     def __init__(self, econf, vocab):
         self.vocab = vocab
         self.length = econf.sample_size  # max number of tokens per vector
+        self._preprocess = get_preprocessing(econf) or (lambda x: x)
         self._tokenize = get_tokenizer(econf)
         if econf.vectorizer_cache:  # trade memory for speed?
             self._cache = {}
@@ -109,7 +147,7 @@ class Vectorizer:
         '''
         Convert a piece of text to a variable-length list of int.
         '''
-        return list(self._lookup(self._tokenize(text)))
+        return list(self._lookup(self._tokenize(self._preprocess(text))))
 
     def _lookup(self, tokens):
         for token in tokens:
