@@ -8,7 +8,7 @@ optional: bpe embeddings-chiu
 
 # Run target: train a model and evaluate it.
 run:
-	python3 -m src.rank -t -p -r
+	python3 -m tzlink.rank -t -p -r
 
 
 # Intermediate targets: specific paths.
@@ -46,4 +46,4 @@ data/embeddings/bpe%: | data/embeddings
 
 data/embeddings/wvec_200_win-30_chiu-et-al.bin: | data/embeddings
 	@# File ID given in https://github.com/cambridgeltl/BioNLP-2016 (README.md)
-	python3 src/util/gdrive.py 0BzMCqpcgEJgiUWs0ZnU0NlFTam8 | tar -xzOf - bio_nlp_vec/PubMed-shuffle-win-30.bin > $@
+	python3 tzlink/util/gdrive.py 0BzMCqpcgEJgiUWs0ZnU0NlFTam8 | tar -xzOf - bio_nlp_vec/PubMed-shuffle-win-30.bin > $@
