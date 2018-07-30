@@ -18,7 +18,10 @@ def load(econf):
     Load embeddings from binary and create a lookup table.
     '''
     fn = econf.embedding_fn
-    wv = KeyedVectors.load_word2vec_format(fn, binary=fn.endswith('.bin'))
+    if fn.endswith('.kv'):
+        wv = KeyedVectors.load(fn, mmap='r')
+    else:
+        wv = KeyedVectors.load_word2vec_format(fn, binary=fn.endswith('.bin'))
     lookup = {w: i+2 for i, w in enumerate(wv.index2word)}
     # Add two rows in the beginning: one for padding and one for unknown words.
     dim = wv.syn0.shape[1]
