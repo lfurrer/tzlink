@@ -17,6 +17,7 @@ import numpy as np
 
 from .load import load_data, load_dict
 from .vectorize import load_wemb, Vectorizer
+from .overlap import TokenOverlap
 from ..candidates.generate_candidates import candidate_generator
 from ..util.util import CacheDict
 
@@ -88,7 +89,7 @@ class Sampler:
     def _samples(self, corpus, oracle):
         ranges = []
         weights = []
-        samples = []  # holds 6-tuples <x_q, x_a, scores, y, cands, ids>
+        samples = []  # holds 7-tuples <x_q, x_a, score, overlap, y, cand, ids>
         for item, numbers in self._itercandidates(corpus, oracle):
             (mention, ref), occs = item
             offset, length = len(samples), len(numbers)
@@ -160,13 +161,16 @@ class DataSet:
             list of <docid, start, end> triples identifying
             the occurrences in the corpus.
     '''
-    def __init__(self, mentions, weights, x_q, x_a, x_scores, y, cands, ids):
+    def __init__(self, mentions, weights,
+                 x_q, x_a, x_scores, x_overlap, y,
+                 cands, ids):
         # Original data.
         self.mentions = mentions
         # Vectorized data.
         self.x_q = [np.array(x) for x in zip(*x_q)]
         self.x_a = [np.array(x) for x in zip(*x_a)]
         self.x_scores = np.array(x_scores)
+        self.x_overlap = np.array(x_overlap)
         self.y = np.array(y)
         self.weights = np.array(weights)  # repetition counts
         self.scores = None  # hook for predictions
@@ -177,7 +181,7 @@ class DataSet:
     @property
     def x(self):
         '''List of input tensors.'''
-        return [*self.x_q, *self.x_a, self.x_scores]
+        return [*self.x_q, *self.x_a, self.x_scores, self.x_overlap]
 
 
 def _deduplicated(corpus):
@@ -211,6 +215,7 @@ def _worker_task(arg):
 
 
 def _task(items, oracle, cand_gen, vectorizers):
+    overlap = TokenOverlap()
     for mention, samples in cand_gen.samples_many(items, oracle):
         vec_q = [v.vectorize(mention) for v in vectorizers]
         data = []
@@ -220,6 +225,7 @@ def _task(items, oracle, cand_gen, vectorizers):
                 vec_q,
                 vec_a,
                 score,
+                overlap.overlap(mention, cand),
                 (float(label),),
                 cand,
                 cand_gen.terminology.ids([cand]),

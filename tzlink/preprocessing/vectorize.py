@@ -15,6 +15,8 @@ from string import punctuation
 import numpy as np
 from gensim.models.keyedvectors import KeyedVectors
 
+from .tokenization import create_tokenizer
+
 
 def load_wemb(econf):
     '''
@@ -77,32 +79,7 @@ def get_tokenizer(econf):
     '''
     name = econf.tokenizer.lower()
     model = getattr(econf, "tokenizer_model", None)
-    return _get_tokenizer(name, model)
-
-
-def _get_tokenizer(name, model):
-    if name == 'whitespace':
-        # Simply split on whitespace.
-        return str.split
-    if name == 'charclass':
-        # Tokenize on change of character class.
-        pattern = re.compile(
-            r'''\d+|            # match contiguous runs of digits
-                [^\W\d_]+|      # or letters
-                (?:[^\w\s]|_)+  # or other non-whitespace characters
-                ''', re.VERBOSE)
-        return pattern.findall
-    if name == 'bpe':
-        from subword_nmt.apply_bpe import BPE
-        pretokenizer = _get_tokenizer('charclass', None)
-        with open(model, encoding='utf8') as f:
-            bpe = BPE(f)
-        def _tokenize(text):
-            pretok = ' '.join(pretokenizer(text))
-            tokens = bpe.segment(pretok)
-            return tokens.split()
-        return _tokenize
-    raise ValueError('unknown tokenizer: {}'.format(name))
+    return create_tokenizer(name, model)
 
 
 class Vectorizer:

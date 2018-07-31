@@ -72,6 +72,7 @@ def _load(fn):
 def _create_model(conf, emb_matrices=None):
     inp_q, inp_a = [], []
     inp_score = Input(shape=(1,))  # candidate score
+    inp_overlap = Input(shape=(1,))  # token overlap between q and a
     emb_q, emb_a = [], []
     for matrix in emb_matrices or [None]:
         emb = _embedding_layer(conf, matrix)
@@ -86,12 +87,12 @@ def _create_model(conf, emb_matrices=None):
     sem_q = _semantic_layers(conf, emb_q)
     sem_a = _semantic_layers(conf, emb_a)
     v_sem = PairwiseSimilarity()([sem_q, sem_a])
-    join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_score])
-    hidden_layer = Dense(units=1+2*conf.rank.n_kernels,
+    join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_score, inp_overlap])
+    hidden_layer = Dense(units=3+2*conf.rank.n_kernels,
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(*inp_q, *inp_a, inp_score),
+    model = Model(inputs=(*inp_q, *inp_a, inp_score, inp_overlap),
                   outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
