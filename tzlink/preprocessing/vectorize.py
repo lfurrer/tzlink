@@ -16,6 +16,7 @@ import numpy as np
 from gensim.models.keyedvectors import KeyedVectors
 
 from .tokenization import create_tokenizer
+from ..util.util import identity
 
 
 def load_wemb(econf):
@@ -94,7 +95,7 @@ class Vectorizer:
     def __init__(self, econf, vocab):
         self.vocab = vocab
         self.length = econf.sample_size  # max number of tokens per vector
-        self._preprocess = get_preprocessing(econf) or (lambda x: x)
+        self._preprocess = get_preprocessing(econf) or identity
         self._tokenize = get_tokenizer(econf)
         if econf.vectorizer_cache:  # trade memory for speed?
             self._cache = {}

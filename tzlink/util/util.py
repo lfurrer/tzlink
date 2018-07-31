@@ -14,7 +14,7 @@ import os
 import sys
 import gzip
 import subprocess as sp
-from collections import defaultdict
+from collections import defaultdict, Counter, OrderedDict
 from contextlib import contextmanager
 
 from ..conf.config import Config
@@ -100,3 +100,16 @@ class CacheDict(defaultdict):
             raise KeyError(key)
         self[key] = value = self.default_factory(key)
         return value
+
+
+def identity(arg):
+    '''Return a single argument unchanged.'''
+    return arg
+
+
+class OrderedCounter(Counter, OrderedDict):
+    '''
+    A Counter remembering the order of insertion.
+
+    When using .most_common(), ties are broken by insertion order.
+    '''

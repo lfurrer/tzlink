@@ -71,13 +71,13 @@ class Sampler:
     def training_samples(self):
         '''Default-value wrapper around self.samples().'''
         subset = self.conf.general.training_subset
-        oracle = bool(self.conf.candidates.oracle in ('train', 'both'))
+        oracle = self.conf.candidates.oracle['train']
         return self.samples(subset, oracle)
 
     def prediction_samples(self):
         '''Default-value wrapper around self.samples().'''
         subset = self.conf.general.prediction_subset
-        oracle = bool(self.conf.candidates.oracle in ('predict', 'both'))
+        oracle = self.conf.candidates.oracle['predict']
         return self.samples(subset, oracle)
 
     def samples(self, subset, oracle):

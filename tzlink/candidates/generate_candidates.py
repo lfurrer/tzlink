@@ -18,6 +18,8 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from gensim.models.keyedvectors import KeyedVectors, Vocab
 
+from ..util.util import identity, OrderedCounter
+
 
 def candidate_generator(sampler):
     '''
@@ -57,7 +59,7 @@ class _BaseCandidateGenerator:
         self.scores = 1  # number of scores (>1 for multi-generator)
         self.null_score = 0  # score for the worst possible candidate
 
-    def samples(self, mention, ref_ids, oracle=False):
+    def samples(self, mention, ref_ids, oracle=0):
         '''
         Iterate over triples <candidate, score, label>.
 
@@ -69,13 +71,16 @@ class _BaseCandidateGenerator:
 
         Each synonym generates a separate positive sample.
 
-        If oracle is True, positive samples are generated
-        also for names that weren't found through the
-        candidate retrieval mechanism.
+        If oracle is 0, some names might be lacking positive
+        samples (whenever the candidate retrieval mechanism
+        can't find any). Otherwise, positive samples are
+        taken from the ground-truth data until the specified
+        number is reached (if there are that many names for
+        the reference ID).
         '''
         return self._samples(mention, ref_ids, oracle)
 
-    def samples_many(self, items, oracle=False):
+    def samples_many(self, items, oracle=0):
         '''
         Generate samples for multiple mentions.
 
@@ -96,10 +101,12 @@ class _BaseCandidateGenerator:
 
     def _samples(self, mention, ref_ids, oracle):
         candidates = self.scored_candidates(mention)
-        positive = self._positive_samples(ref_ids)
+        all_positive = self._positive_samples(ref_ids)
+        positive = all_positive.intersection(candidates)
         negative = set(candidates).difference(positive)
-        if not oracle:
-            positive = positive.intersection(candidates)
+        if len(positive) < oracle:
+            missing = list(all_positive.difference(positive))
+            positive.update(self.topN(mention, missing, oracle-len(positive)))
 
         for subset, label in ((positive, True), (negative, False)):
             for cand in subset:
@@ -130,6 +137,12 @@ class _BaseCandidateGenerator:
         '''
         raise NotImplementedError
 
+    def topN(self, mention, candidates, n):
+        '''
+        Rank the given candidates for mention and take the best n.
+        '''
+        raise NotImplementedError
+
 
 class _MultiGenerator(_BaseCandidateGenerator):
     '''
@@ -156,6 +169,12 @@ class _MultiGenerator(_BaseCandidateGenerator):
         candidates.default_factory = None  # avoid closure (?)
         return candidates
 
+    def topN(self, mention, candidates, n):
+        best = OrderedCounter()
+        for g in self.generators:
+            best.update(g.topN(mention, candidates, n))
+        return (c for c, _ in best.most_common(n))
+
 
 class SGramCosineCandidates(_BaseCandidateGenerator):
     '''
@@ -175,6 +194,7 @@ class SGramCosineCandidates(_BaseCandidateGenerator):
         self.size = size
         self.shapes = sgrams  # <n, k>
         self._names = list(self.terminology.iter_names())
+        self._name_index = {n: i for i, n in enumerate(self._names)}
         self._sgram_index = {}  # s-gram vocabulary
         self._sgram_matrix = self._create_matrix(self._names, update=True)
         self._cache = None  # lookup, matrix
@@ -203,14 +223,14 @@ class SGramCosineCandidates(_BaseCandidateGenerator):
             data.append(row)
         return np.concatenate(data), indices, indptr
 
-    def _similarities(self, name):
+    def _sgram_vector(self, name):
         voc = len(self._sgram_index)
         sgrams = np.zeros(voc+1)
         for gram in self._preprocess(name):
             i = self._sgram_index.get(gram, voc)
             sgrams[i] += 1
         L2normalize(sgrams)
-        return self._sgram_matrix.dot(sgrams)
+        return sgrams
 
     def _preprocess(self, text):
         text = self._lookup_normalize(text)
@@ -254,25 +274,44 @@ class SGramCosineCandidates(_BaseCandidateGenerator):
         '''
         Iterate over candidates and cosine similarity scores.
         '''
+        sim = self._similarities(mention)
+        return self._select_candidates(
+            sim, self.size, self.threshold, self._names)
+
+    def topN(self, mention, candidates, n):
+        cand_i = [self._name_index[c] for c in candidates]
+        sim = self._similarities(mention, limit=cand_i)
+        return (c for c, _ in self._select_candidates(sim, n, 0, candidates))
+
+    def _similarities(self, mention, limit=None):
+        if limit is None:
+            select = identity
+            limit = slice(None)
+        else:
+            select = lambda m: m[limit]
+
         try:
+            # Try to find it in the cache.
             i = self._cache[0][mention]
         except (TypeError, KeyError):
             # Compute the similarity with every candidate.
-            sim = self._similarities(mention)
+            sgrams = self._sgram_vector(mention)
+            sim = select(self._sgram_matrix).dot(sgrams)
         else:
-            sim = self._cache[1][:, i]
-        return self._cosine_scored_candidates(sim)
+            sim = self._cache[1][limit, i]
+        return sim
 
-    def _cosine_scored_candidates(self, sim):
-        if self.size:
-            indices = np.argpartition(-sim, range(self.size))[:self.size]
+    @staticmethod
+    def _select_candidates(sim, size, threshold, names):
+        if size and len(names) > size:
+            indices = np.argpartition(-sim, range(size))[:size]
         else:
             indices = np.argsort(-sim)
         for i in indices:
             cos = sim[i]
-            if cos < self.threshold:
+            if cos < threshold:
                 break
-            yield self._names[i], cos
+            yield names[i], cos
 
 
 class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
@@ -328,6 +367,17 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         vector = self._phrase_vector(mention)
         return self._pv.most_similar(positive=[vector], topn=self.size)
 
+    def topN(self, mention, candidates, n):
+        cand_i = [self._pv.vocab[c].index for c in candidates]
+        cand_matrix = self._pv.syn0[cand_i]
+        sim = cand_matrix.dot(self._phrase_vector(mention))
+        if len(candidates) > n:
+            top_i = np.argpartition(-sim, range(n))[:n]
+        else:
+            top_i = np.argsort(-sim)
+        for i in top_i:
+            yield candidates[i]
+
 
 class _NonRankedCandidates(_BaseCandidateGenerator):
     '''
@@ -343,6 +393,11 @@ class _NonRankedCandidates(_BaseCandidateGenerator):
     def _candidates(self, mention):
         '''Iterate over candidate names.'''
         raise NotImplementedError
+
+    def topN(self, mention, candidates, n):
+        # There's no way to rank the candidates, just pick the first n.
+        del mention
+        return candidates[:n]
 
 
 class SymbolReplacementCandidates(_NonRankedCandidates):
