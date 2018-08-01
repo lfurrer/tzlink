@@ -42,6 +42,7 @@ def _create_generator(value, sampler):
         'sgramfixedset': SGramFixedSetCandidates,
         'sgramcosine': SGramCosineCandidates,
         'phrasevecfixedset': PhraseVecFixedSetCandidates,
+        'symbolreplacement': SymbolReplacementCandidates,
     }[name.lower()]
     if args:
         args = ast.literal_eval(args)
@@ -400,6 +401,103 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         '''
         vector = self._phrase_vector(mention)
         return self._pv.most_similar(positive=[vector], topn=self.size)
+
+
+class SymbolReplacementCandidates(_BaseCandidateGenerator):
+    '''
+    Names reachable through symbol/word substitution.
+    '''
+
+    numerals = {
+        '1': ('one', 'single'),
+        '2': ('two', 'double', 'ii'),
+        '3': ('three', 'triple'),
+        '4': ('four', 'quadruple'),
+        '5': ('five',),
+        '6': ('six',),
+        '7': ('seven',),
+        '8': ('eight',),
+        '9': ('nine',),
+    }
+
+    other_symbols = {
+        'and/or': 'and',
+        '/': ' and ',
+        ' (': '',
+        '(': '',
+        ')': '',
+    }
+
+    def __init__(self, shared, include_original=True):
+        super().__init__(shared)
+        self.include_original = include_original
+        self._names = frozenset(self.terminology.iter_names())
+        self._subs = self._compile_subs()
+        self._symbols = self._build_regex()
+
+    def _compile_subs(self):
+        subs = {}
+        for digit, words in self.numerals.items():
+            subs[digit] = (digit, *words)
+            for word in words:
+                subs[word] = (word, digit)
+        for sym, word in self.other_symbols.items():
+            subs[sym] = (sym, word)
+        return subs
+
+    def _build_regex(self):
+        # Make sure "and/or" comes before "/" in the list of alternatives.
+        targets = sorted(self._subs, key=len, reverse=True)
+        alts = '|'.join(re.escape(tgt) for tgt in targets)
+        return re.compile('({})'.format(alts))
+
+    def candidates(self, mention):
+        return set(self.sorted_candidates(mention))
+
+    def scored_candidates(self, mention):
+        return rank_scored(self._sorted_scored_candidates(mention))
+
+    def sorted_candidates(self, mention):
+        '''
+        Iterate over candidates, sorted by number of substitutions.
+        '''
+        return (c for c, _, in self._sorted_scored_candidates(mention))
+
+    def _sorted_scored_candidates(self, mention):
+        return sorted(set(self._scored_candidates(mention)), key=lambda c: c[1])
+
+    def _scored_candidates(self, mention):
+        '''
+        Candidates with scores indicating the number of substitutions.
+        '''
+        for variant, subs in self._generate_variants(mention):
+            if subs or self.include_original:
+                if variant in self._names:
+                    yield variant, subs
+
+    def _generate_variants(self, mention):
+
+        # re.split() with a capturing group puts all separators (= targets)
+        # at odd positions, ie. parts[1::2].
+        parts = self._symbols.split(mention)
+        if len(parts) <= 1:
+            yield mention, 0  # include the unchanged word anyway
+            return  # no match
+
+        # Make a nested list of alternatives to produce combinatoric variants.
+        # Each inner list has the non-changed alternative first.
+        alternatives = [self._subs[match] for match in parts[1::2]]
+        combinations = it.product(*alternatives)
+        subs_counts = self._count_subsitutions(alternatives)
+        for combination, subs in zip(combinations, subs_counts):
+            parts[1::2] = combination
+            yield ''.join(parts), subs
+
+    @staticmethod
+    def _count_subsitutions(alternatives):
+        counts = [range(len(a)) for a in alternatives]
+        for comb in it.product(*counts):
+            yield sum(map(bool, comb))
 
 
 def rank_scored(scored):
