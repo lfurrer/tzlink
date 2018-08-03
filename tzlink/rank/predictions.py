@@ -85,7 +85,7 @@ class DetailedWriter:
     def update(self, mention, refs, occs, ranking, outcome):
         '''Update with a distinct mention.'''
         category, pred = self._outcome(outcome)
-        self._entries[category][str(refs)] = (mention, occs, pred, ranking)
+        self._entries[category][str(refs), mention] = (occs, pred, ranking)
 
     def dump(self):
         '''Write to disk.'''
@@ -97,7 +97,7 @@ class DetailedWriter:
 
     def _iterentries(self, category):
         entries = sorted(self._entries[category].items())
-        for refs, (mention, occs, pred, ranking) in entries:
+        for (refs, mention), (occs, pred, ranking) in entries:
             yield ('Concept:', refs)
             yield ('Term:', mention)
             yield ('Occs:', self._occ_summary(occs))
