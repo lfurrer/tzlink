@@ -43,6 +43,7 @@ def _create_generator(value, sampler):
         'sgramcosine': SGramCosineCandidates,
         'phrasevecfixedset': PhraseVecFixedSetCandidates,
         'symbolreplacement': SymbolReplacementCandidates,
+        'hyperonym': HyperonymCandidates,
     }[name.lower()]
     if args:
         args = ast.literal_eval(args)
@@ -498,6 +499,46 @@ class SymbolReplacementCandidates(_BaseCandidateGenerator):
         counts = [range(len(a)) for a in alternatives]
         for comb in it.product(*counts):
             yield sum(map(bool, comb))
+
+
+class HyperonymCandidates(_BaseCandidateGenerator):
+    '''
+    Names containing only parts of the mention.
+    '''
+
+    stopwords = frozenset((
+        'disease', 'diseases',
+        'disorder', 'disorders',
+        'condition', 'conditions',
+    ))
+
+    def __init__(self, shared):
+        super().__init__(shared)
+        self._token = re.compile(r'\w+')
+        self._names = self._index_names()
+
+    def _index_names(self):
+        names = {}
+        for name in self.terminology.iter_names():
+            tokens = set(self._preprocess(name)).difference(self.stopwords)
+            if len(tokens) == 1:
+                (token,) = tokens
+                names.setdefault(token, set()).add(name)
+        return names
+
+    def _preprocess(self, term):
+        return self._token.findall(term.lower())
+
+    def candidates(self, mention):
+        return set(self._candidates(mention))
+
+    def scored_candidates(self, mention):
+        return rank_scored((c, 1) for c in self._candidates(mention))
+
+    def _candidates(self, mention):
+        for token in self._preprocess(mention):
+            if token in self._names:
+                yield from self._names[token]
 
 
 def rank_scored(scored):
