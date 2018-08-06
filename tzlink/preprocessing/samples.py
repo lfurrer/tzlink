@@ -35,8 +35,6 @@ class Sampler:
 
         self.terminology = None
         self.emb = CacheDict(self._load_embeddings)
-        self.vectorizers = None
-        self.emb_matrices = None
         self.cand_gen = None
         self._pool = None
         self._load()
@@ -44,8 +42,6 @@ class Sampler:
     def _load(self):
         logging.info('loading terminology...')
         self.terminology = load_dict(self.conf)
-        self.vectorizers, self.emb_matrices = \
-            zip(*(self.emb[emb] for emb in self.conf.rank.embeddings))
         logging.info('loading candidate generator...')
         self.cand_gen = candidate_generator(self)
 
@@ -56,6 +52,11 @@ class Sampler:
         logging.info('loading vectorizer...')
         vectorizer = Vectorizer(econf, voc_index)
         return EmbeddingInfo(vectorizer, emb_matrix)
+
+    @property
+    def vectorizers(self):
+        '''A list of vectorizers, one for each embedding.'''
+        return [self.emb[emb].vectorizer for emb in self.conf.rank.embeddings]
 
     @property
     def pool(self):

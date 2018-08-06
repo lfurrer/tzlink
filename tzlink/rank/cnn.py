@@ -49,7 +49,7 @@ def run(conf, train=True, dumpfn=None, **evalparams):
 
 def _train(conf, sampler, val_data, dumpfn):
     logging.info('compiling model architecture...')
-    model = _create_model(conf, sampler.emb_matrices)
+    model = _create_model(conf, sampler)
     logging.info('preprocessing training data...')
     tr_data = sampler.training_samples()
     logging.info('training CNN...')
@@ -69,47 +69,54 @@ def _load(fn):
     return model
 
 
-def _create_model(conf, emb_matrices=None):
-    inp_q, inp_a = [], []
+def _create_model(conf, sampler):
+    inp_words, emb_nodes = _word_layers(conf, sampler)
     inp_score = Input(shape=(1,))  # candidate score
     inp_overlap = Input(shape=(1,))  # token overlap between q and a
-    emb_q, emb_a = [], []
-    for matrix in emb_matrices or [None]:
-        emb = _embedding_layer(conf, matrix)
-        for i, e in ((inp_q, emb_q), (inp_a, emb_a)):
-            inp = Input(shape=(conf.emb.sample_size,))
-            i.append(inp)
-            e.append(emb(inp))
-    if len(emb_q) > 1:
-        emb_q, emb_a = (Concatenate()(e) for e in (emb_q, emb_a))
-    else:
-        emb_q, emb_a = emb_q[0], emb_a[0]
-    sem_q = _semantic_layers(conf, emb_q)
-    sem_a = _semantic_layers(conf, emb_a)
+
+    sem_q, sem_a = (_semantic_layers(conf, e) for e in emb_nodes)
     v_sem = PairwiseSimilarity()([sem_q, sem_a])
     join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_score, inp_overlap])
     hidden_layer = Dense(units=3+2*conf.rank.n_kernels,
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(*inp_q, *inp_a, inp_score, inp_overlap),
+    model = Model(inputs=(*inp_words, inp_score, inp_overlap),
                   outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
 
 
-def _embedding_layer(conf, matrix=None):
+def _word_layers(conf, sampler):
+    inp_q, inp_a = [], []
+    emb_q, emb_a = [], []
+    for emb in conf.rank.embeddings:
+        matrix = sampler.emb[emb].emb_matrix
+        emb_layer = _embedding_layer(conf[emb], matrix)
+        for i, e in ((inp_q, emb_q), (inp_a, emb_a)):
+            inp = Input(shape=(conf[emb].sample_size,))
+            i.append(inp)
+            e.append(emb_layer(inp))
+
+    inp_nodes = inp_q + inp_a
+    emb_nodes = [Concatenate()(e) if len(e) > 1 else e[0]
+                 for e in (emb_q, emb_a)]
+
+    return inp_nodes, emb_nodes
+
+
+def _embedding_layer(econf, matrix=None):
     if matrix is not None:
         vocab_size, embedding_dim = matrix.shape
         layer = Embedding(vocab_size,
                           embedding_dim,
                           weights=[matrix],
-                          input_length=conf.emb.sample_size,
-                          trainable=conf.emb.trainable)
+                          input_length=econf.sample_size,
+                          trainable=econf.trainable)
     else:
-        layer = Embedding(conf.emb.embedding_voc,
-                          conf.emb.embedding_dim,
-                          input_length=conf.emb.sample_size)
+        layer = Embedding(econf.embedding_voc,
+                          econf.embedding_dim,
+                          input_length=econf.sample_size)
     return layer
 
 
