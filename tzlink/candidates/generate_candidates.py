@@ -55,6 +55,7 @@ def _create_generator(value, sampler):
 class _BaseCandidateGenerator:
     def __init__(self, shared):
         self.terminology = shared.terminology
+        self.scores = 1
 
     def samples(self, mention, ref_ids, oracle=False):
         '''
@@ -143,22 +144,14 @@ class _MultiGenerator(_BaseCandidateGenerator):
     def __init__(self, shared, generators):
         super().__init__(shared)
         self.generators = generators
+        self.scores = len(self.generators)
 
     def candidates(self, mention):
         return set().union(*(g.candidates(mention) for g in self.generators))
 
     def scored_candidates(self, mention):
-        return self._sum_scores(g.scored_candidates(mention)
-                                for g in self.generators)
-
-    def sorted_candidates(self, mention):
-        '''
-        Iterate over sorted candidates from all generators.
-
-        Sorting is based on the rank scores from each generator.
-        '''
-        for candidate, _ in self.scored_candidates(mention).most_common():
-            yield candidate
+        return self._comb_scores(g.scored_candidates(mention)
+                                 for g in self.generators)
 
     def candidates_many(self, mentions):
         for candidates in zip(*(g.candidates_many(mentions)
@@ -168,22 +161,14 @@ class _MultiGenerator(_BaseCandidateGenerator):
     def scored_candidates_many(self, mentions):
         for scored in zip(*(g.scored_candidates_many(mentions)
                             for g in self.generators)):
-            yield self._sum_scores(scored)
+            yield self._comb_scores(scored)
 
-    def sorted_candidates_many(self, mentions):
-        '''
-        Nested iteration over sorted candidates from all generators.
-        '''
-        for scored in self.scored_candidates_many(mentions):
-            for candidate, _, in scored.most_common():
-                yield candidate
-
-    @staticmethod
-    def _sum_scores(scored):
-        candidates = Counter()  # works with float values just fine
-        for s in scored:
-            # On collisions, Counter.update sums the values.
-            candidates.update(s)
+    def _comb_scores(self, scored):
+        candidates = defaultdict(lambda: [0]*self.scores)
+        for i, c_s in enumerate(scored):
+            for cand, score in c_s.items():
+                candidates[cand][i] = score
+        candidates.default_factory = None  # avoid closure (?)
         return candidates
 
 

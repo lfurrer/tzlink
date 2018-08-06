@@ -141,6 +141,8 @@ class DataSet:
             If multiple embeddings are used, then each list
             contains multiple arrays.
         x_scores: confidence scores from candidate generation
+            (1D or 2D numpy array)
+        x_overlap: proportion of overlapping tokens
             (1D numpy array)
         x: the list [x_q_1, ... x_q_n, x_a_1, ... x_a_n, x_scores]
         y: the labels (2D numpy array)

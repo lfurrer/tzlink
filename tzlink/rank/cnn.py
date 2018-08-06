@@ -71,17 +71,17 @@ def _load(fn):
 
 def _create_model(conf, sampler):
     inp_words, emb_nodes = _word_layers(conf, sampler)
-    inp_score = Input(shape=(1,))  # candidate score
+    inp_scores = Input(shape=(sampler.cand_gen.scores,))
     inp_overlap = Input(shape=(1,))  # token overlap between q and a
 
     sem_q, sem_a = (_semantic_layers(conf, e) for e in emb_nodes)
     v_sem = PairwiseSimilarity()([sem_q, sem_a])
-    join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_score, inp_overlap])
-    hidden_layer = Dense(units=3+2*conf.rank.n_kernels,
+    join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_scores, inp_overlap])
+    hidden_layer = Dense(units=2*conf.rank.n_kernels+sampler.cand_gen.scores+2,
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(*inp_words, inp_score, inp_overlap),
+    model = Model(inputs=(*inp_words, inp_scores, inp_overlap),
                   outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
