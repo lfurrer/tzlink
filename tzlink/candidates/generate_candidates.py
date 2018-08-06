@@ -44,6 +44,7 @@ def _create_generator(value, sampler):
         'phrasevecfixedset': PhraseVecFixedSetCandidates,
         'symbolreplacement': SymbolReplacementCandidates,
         'hyperonym': HyperonymCandidates,
+        'abbreviation': AbbreviationCandidates,
     }[name.lower()]
     if args:
         args = ast.literal_eval(args)
@@ -539,6 +540,50 @@ class HyperonymCandidates(_BaseCandidateGenerator):
         for token in self._preprocess(mention):
             if token in self._names:
                 yield from self._names[token]
+
+
+class AbbreviationCandidates(_BaseCandidateGenerator):
+    '''
+    Derived abbreviations.
+    '''
+
+    def __init__(self, shared):
+        super().__init__(shared)
+        self._abbrevs = self._index_names()
+
+    def _index_names(self):
+        names = {}
+        for name in self.terminology.iter_names():
+            abbrev = self._generate_abbrev(name)
+            if not self.terminology.ids([name]) < self.terminology.ids([abbrev]):
+                # Only use abbreviations that actually add new information.
+                names.setdefault(abbrev, []).append(name)
+        return names
+
+    def _generate_abbrev(self, name):
+        return ''.join(self._abbrev_tokens(name))
+
+    @staticmethod
+    def _abbrev_tokens(name):
+        # Reverse comma-separated chunks.
+        for chunk in reversed(re.split(r', *', name)):
+            # Take all alphabetic initials and whole numbers.
+            for token in re.findall(r'\w+', chunk):
+                if token.isdigit():
+                    yield token
+                else:
+                    initial = token[0]
+                    if initial.isalpha():
+                        yield initial
+
+    def candidates(self, mention):
+        return set(self._candidates(mention))
+
+    def scored_candidates(self, mention):
+        return rank_scored((c, 1) for c in self._candidates(mention))
+
+    def _candidates(self, mention):
+        yield from self._abbrevs.get(mention, ())
 
 
 def rank_scored(scored):
