@@ -39,7 +39,6 @@ def _create_generator(value, sampler):
     name, args = re.fullmatch(r'(\w+)(.*)', value).groups()
 
     cls = {
-        'sgramfixedset': SGramFixedSetCandidates,
         'sgramcosine': SGramCosineCandidates,
         'phrasevecfixedset': PhraseVecFixedSetCandidates,
         'symbolreplacement': SymbolReplacementCandidates,
@@ -172,75 +171,7 @@ class _MultiGenerator(_BaseCandidateGenerator):
         return candidates
 
 
-class SGramFixedSetCandidates(_BaseCandidateGenerator):
-    '''
-    N best candidates based on absolute skip-gram overlap.
-    '''
-
-    def __init__(self, shared, size=20, sgrams=((2, 1), (3, 1))):
-        super().__init__(shared)
-        self.size = size
-        self.shapes = sgrams  # <n, k>
-        self._sgram_index = self._create_index()
-
-    def _create_index(self):
-        index = defaultdict(Counter)
-        for name in self.terminology.iter_names():
-            for sgram in self._preprocess(name):
-                index[sgram][name] += 1
-        # Freeze the s-gram index.
-        return dict(index)
-
-    def candidates(self, mention):
-        return set(self.sorted_candidates(mention))
-
-    def scored_candidates(self, mention):
-        return dict(self._best_candidates(mention))
-
-    def sorted_candidates(self, mention):
-        '''
-        Iterate over candidates, sorted by decreasing overlap.
-        '''
-        return (c for c, _ in self._best_candidates(mention))
-
-    def _best_candidates(self, mention):
-        return self.all_candidates(mention).most_common(self.size)
-
-    def all_candidates(self, mention):
-        '''
-        Create a Counter of all entries with *any* overlap.
-        '''
-        # Compute the absolute overlap of skip-grams.
-        candidates = Counter()
-        for sgram, m_count in Counter(self._preprocess(mention)).items():
-            for cand, c_count in self._sgram_index.get(sgram, _D).items():
-                candidates[cand] += min(m_count, c_count)
-        # When sorting the candidates, resolve ties by preferring shorter names.
-        for cand, count in candidates.items():
-            candidates[cand] = (count, -len(cand))
-        return candidates
-
-    def _preprocess(self, text):
-        text = self._lookup_normalize(text)
-        for n, k in self.shapes:
-            yield from self._skipgrams(text, n, k)
-
-    @staticmethod
-    def _lookup_normalize(text):
-        return text.lower()
-
-    @staticmethod
-    def _skipgrams(text, n, k):
-        for i in range(len(text)-n+1):
-            head = (text[i],)
-            for tail in it.combinations(text[i+1 : i+n+k], n-1):
-                yield head + tail
-
-# Empty dict instance used for some optimisation.
-_D = {}
-
-
-class SGramCosineCandidates(SGramFixedSetCandidates):
+class SGramCosineCandidates(_BaseCandidateGenerator):
     '''
     Candidates based on cosine similarity of skip-grams.
 
@@ -252,19 +183,14 @@ class SGramCosineCandidates(SGramFixedSetCandidates):
     candidate set consists of the entire terminology.
     '''
 
-    def __init__(self, shared, threshold=.7, *args, **kwargs):
-        super().__init__(shared, *args, **kwargs)
+    def __init__(self, shared, threshold=.7, size=20, sgrams=((2, 1), (3, 1))):
+        super().__init__(shared)
         self.threshold = threshold
+        self.size = size
+        self.shapes = sgrams  # <n, k>
         self._names = list(self.terminology.iter_names())
+        self._sgram_index = {}  # s-gram vocabulary
         self._sgram_matrix = self._create_matrix(self._names, update=True)
-
-    def _create_index(self):
-        '''
-        Initialize a dict for the s-gram vocabulary.
-
-        This is mainly a placeholder for overriding the superclass method.
-        '''
-        return {}
 
     def _create_matrix(self, names, update=False):
         data_triple = self._matrix_data(names, update)
@@ -290,10 +216,32 @@ class SGramCosineCandidates(SGramFixedSetCandidates):
             data.append(row)
         return np.concatenate(data), indices, indptr
 
+    def _preprocess(self, text):
+        text = self._lookup_normalize(text)
+        for n, k in self.shapes:
+            yield from self._skipgrams(text, n, k)
+
+    @staticmethod
+    def _lookup_normalize(text):
+        return text.lower()
+
+    @staticmethod
+    def _skipgrams(text, n, k):
+        for i in range(len(text)-n+1):
+            head = (text[i],)
+            for tail in it.combinations(text[i+1 : i+n+k], n-1):
+                yield head + tail
+
+    def candidates(self, mention):
+        return set(self.sorted_candidates(mention))
+
     def scored_candidates(self, mention):
         return next(iter(self.scored_candidates_many([mention])))
 
     def sorted_candidates(self, mention):
+        '''
+        Iterate over candidates, sorted by decreasing similarity.
+        '''
         return next(iter(self.sorted_candidates_many([mention])))
 
     def all_candidates(self, mention):
