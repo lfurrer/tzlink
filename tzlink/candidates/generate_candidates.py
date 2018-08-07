@@ -195,15 +195,16 @@ class SGramFixedSetCandidates(_BaseCandidateGenerator):
         return set(self.sorted_candidates(mention))
 
     def scored_candidates(self, mention):
-        scored = self.all_candidates(mention).most_common(self.size)
-        return rank_scored(scored)
+        return dict(self._best_candidates(mention))
 
     def sorted_candidates(self, mention):
         '''
         Iterate over candidates, sorted by decreasing overlap.
         '''
-        candidates = self.all_candidates(mention)
-        return (c for c, _ in candidates.most_common(self.size))
+        return (c for c, _ in self._best_candidates(mention))
+
+    def _best_candidates(self, mention):
+        return self.all_candidates(mention).most_common(self.size)
 
     def all_candidates(self, mention):
         '''
@@ -305,7 +306,7 @@ class SGramCosineCandidates(SGramFixedSetCandidates):
         return map(set, self.sorted_candidates_many(mentions))
 
     def scored_candidates_many(self, mentions):
-        return map(rank_scored, self._scored_candidates_many(mentions))
+        return map(dict, self._scored_candidates_many(mentions))
 
     def sorted_candidates_many(self, mentions):
         '''
@@ -374,7 +375,7 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         return set(self.sorted_candidates(mention))
 
     def scored_candidates(self, mention):
-        return rank_scored(self._scored_candidates(mention))
+        return dict(self._scored_candidates(mention))
 
     def sorted_candidates(self, mention):
         '''
@@ -442,16 +443,15 @@ class SymbolReplacementCandidates(_BaseCandidateGenerator):
         return set(self.sorted_candidates(mention))
 
     def scored_candidates(self, mention):
-        return rank_scored(self._sorted_scored_candidates(mention))
+        return {c: 1/(s+1) for c, s in self._scored_candidates(mention)}
 
     def sorted_candidates(self, mention):
         '''
         Iterate over candidates, sorted by number of substitutions.
         '''
-        return (c for c, _, in self._sorted_scored_candidates(mention))
-
-    def _sorted_scored_candidates(self, mention):
-        return sorted(set(self._scored_candidates(mention)), key=lambda c: c[1])
+        for c, _ in sorted(self._scored_candidates(mention),
+                           key=lambda c: c[1]):
+            yield c
 
     def _scored_candidates(self, mention):
         '''
@@ -519,7 +519,7 @@ class HyperonymCandidates(_BaseCandidateGenerator):
         return set(self._candidates(mention))
 
     def scored_candidates(self, mention):
-        return rank_scored((c, 1) for c in self._candidates(mention))
+        return {c: 1. for c in self._candidates(mention)}
 
     def _candidates(self, mention):
         for token in self._preprocess(mention):
@@ -565,24 +565,10 @@ class AbbreviationCandidates(_BaseCandidateGenerator):
         return set(self._candidates(mention))
 
     def scored_candidates(self, mention):
-        return rank_scored((c, 1) for c in self._candidates(mention))
+        return {c: 1. for c in self._candidates(mention)}
 
     def _candidates(self, mention):
         yield from self._abbrevs.get(mention, ())
-
-
-def rank_scored(scored):
-    '''
-    Convert arbitrary scores to 1/rank scores.
-    '''
-    candidates = {}
-    rank, previous = 0, None
-    for cand, score in scored:
-        if score != previous:
-            rank += 1
-            previous = score
-        candidates[cand] = 1/rank
-    return candidates
 
 
 def L2normalize(vector):
