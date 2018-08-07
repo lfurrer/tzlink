@@ -73,8 +73,7 @@ class _BaseCandidateGenerator:
         also for names that weren't found through the
         candidate retrieval mechanism.
         '''
-        candidates = self.scored_candidates(mention)
-        return self._samples(candidates, ref_ids, oracle)
+        return self._samples(mention, ref_ids, oracle)
 
     def samples_many(self, items, oracle=False):
         '''
@@ -90,12 +89,13 @@ class _BaseCandidateGenerator:
             <mention, samples> for each mention
                 <candidate, score, label> for each sample
         '''
-        candidates = self.scored_candidates_many([m for m, _ in items])
-        for (mention, ref_ids), cand in zip(items, candidates):
-            samples = self._samples(cand, ref_ids, oracle)
+        self.precompute([m for m, _ in items])
+        for mention, ref_ids in items:
+            samples = self._samples(mention, ref_ids, oracle)
             yield mention, samples
 
-    def _samples(self, candidates, ref_ids, oracle):
+    def _samples(self, mention, ref_ids, oracle):
+        candidates = self.scored_candidates(mention)
         positive = self._positive_samples(ref_ids)
         negative = set(candidates).difference(positive)
         if not oracle:
@@ -110,6 +110,14 @@ class _BaseCandidateGenerator:
         positive = self.terminology.names(ref_ids)
         return positive
 
+    @staticmethod
+    def precompute(mentions):
+        '''
+        Precompute some cache values, if applicable.
+        '''
+        # Default is a no-op.
+        del mentions
+
     def candidates(self, mention):
         '''
         Compute a set of candidate names from the dictionary.
@@ -121,20 +129,6 @@ class _BaseCandidateGenerator:
         Create a dict of candidate names mapped to a score.
         '''
         raise NotImplementedError
-
-    def candidates_many(self, mentions):
-        '''
-        Iterate over a set of candidates for each mention.
-        '''
-        for m in mentions:
-            yield self.candidates(m)
-
-    def scored_candidates_many(self, mentions):
-        '''
-        Iterate over a dict of scored candidates for each mention.
-        '''
-        for m in mentions:
-            yield self.scored_candidates(m)
 
 
 class _MultiGenerator(_BaseCandidateGenerator):
@@ -153,16 +147,6 @@ class _MultiGenerator(_BaseCandidateGenerator):
     def scored_candidates(self, mention):
         return self._comb_scores(g.scored_candidates(mention)
                                  for g in self.generators)
-
-    def candidates_many(self, mentions):
-        for candidates in zip(*(g.candidates_many(mentions)
-                                for g in self.generators)):
-            yield set().union(*candidates)
-
-    def scored_candidates_many(self, mentions):
-        for scored in zip(*(g.scored_candidates_many(mentions)
-                            for g in self.generators)):
-            yield self._comb_scores(scored)
 
     def _comb_scores(self, scored):
         candidates = defaultdict(lambda: list(self.null_score))  # copy!
@@ -193,6 +177,7 @@ class SGramCosineCandidates(_BaseCandidateGenerator):
         self._names = list(self.terminology.iter_names())
         self._sgram_index = {}  # s-gram vocabulary
         self._sgram_matrix = self._create_matrix(self._names, update=True)
+        self._cache = None  # lookup, matrix
 
     def _create_matrix(self, names, update=False):
         data_triple = self._matrix_data(names, update)
@@ -218,6 +203,15 @@ class SGramCosineCandidates(_BaseCandidateGenerator):
             data.append(row)
         return np.concatenate(data), indices, indptr
 
+    def _similarities(self, name):
+        voc = len(self._sgram_index)
+        sgrams = np.zeros(voc+1)
+        for gram in self._preprocess(name):
+            i = self._sgram_index.get(gram, voc)
+            sgrams[i] += 1
+        L2normalize(sgrams)
+        return self._sgram_matrix.dot(sgrams)
+
     def _preprocess(self, text):
         text = self._lookup_normalize(text)
         for n, k in self.shapes:
@@ -238,42 +232,36 @@ class SGramCosineCandidates(_BaseCandidateGenerator):
         return set(self.sorted_candidates(mention))
 
     def scored_candidates(self, mention):
-        return next(iter(self.scored_candidates_many([mention])))
+        return dict(self.all_candidates(mention))
 
     def sorted_candidates(self, mention):
         '''
         Iterate over candidates, sorted by decreasing similarity.
         '''
-        return next(iter(self.sorted_candidates_many([mention])))
+        return (c for c, _ in self.all_candidates(mention))
+
+    def precompute(self, mentions):
+        '''
+        Create a similarity matrix and a lookup table.
+        '''
+        sgrams = self._create_matrix(mentions)
+        sim = self._sgram_matrix.dot(sgrams.T)
+        sim = sim.toarray()
+        lookup = {m: i for i, m in enumerate(mentions)}
+        self._cache = (lookup, sim)
 
     def all_candidates(self, mention):
         '''
         Iterate over candidates and cosine similarity scores.
         '''
-        return next(iter(self._scored_candidates_many([mention])))
-
-    def candidates_many(self, mentions):
-        return map(set, self.sorted_candidates_many(mentions))
-
-    def scored_candidates_many(self, mentions):
-        return map(dict, self._scored_candidates_many(mentions))
-
-    def sorted_candidates_many(self, mentions):
-        '''
-        Nested iterator over candidate names, sorted by cosine similarity.
-        '''
-        for scored in self._scored_candidates_many(mentions):
-            yield (c for c, _ in scored)
-
-    def _scored_candidates_many(self, mentions):
-        '''
-        Nested iterator over candidate names with cosine similarity.
-        '''
-        sgrams = self._create_matrix(mentions)
-        sim = self._sgram_matrix.dot(sgrams.T)
-        sim = sim.toarray()
-        for i in range(sim.shape[1]):
-            yield self._cosine_scored_candidates(sim[:, i])
+        try:
+            i = self._cache[0][mention]
+        except (TypeError, KeyError):
+            # Compute the similarity with every candidate.
+            sim = self._similarities(mention)
+        else:
+            sim = self._cache[1][:, i]
+        return self._cosine_scored_candidates(sim)
 
     def _cosine_scored_candidates(self, sim):
         if self.size:
@@ -331,7 +319,7 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         '''
         Iterate over candidates, sorted by decreasing similarity.
         '''
-        return (c for c, _, in self._scored_candidates(mention))
+        return (c for c, _ in self._scored_candidates(mention))
 
     def _scored_candidates(self, mention):
         '''
