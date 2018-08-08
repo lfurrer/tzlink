@@ -54,7 +54,8 @@ def _create_generator(value, sampler):
 class _BaseCandidateGenerator:
     def __init__(self, shared):
         self.terminology = shared.terminology
-        self.scores = 1
+        self.scores = 1  # number of scores (>1 for multi-generator)
+        self.null_score = 0  # score for the worst possible candidate
 
     def samples(self, mention, ref_ids, oracle=False):
         '''
@@ -102,7 +103,7 @@ class _BaseCandidateGenerator:
 
         for subset, label in ((positive, True), (negative, False)):
             for cand in subset:
-                score = candidates.get(cand, 0)
+                score = candidates.get(cand, self.null_score)
                 yield cand, score, label
 
     def _positive_samples(self, ref_ids):
@@ -144,6 +145,7 @@ class _MultiGenerator(_BaseCandidateGenerator):
         super().__init__(shared)
         self.generators = generators
         self.scores = len(self.generators)
+        self.null_score = [g.null_score for g in self.generators]
 
     def candidates(self, mention):
         return set().union(*(g.candidates(mention) for g in self.generators))
@@ -163,7 +165,7 @@ class _MultiGenerator(_BaseCandidateGenerator):
             yield self._comb_scores(scored)
 
     def _comb_scores(self, scored):
-        candidates = defaultdict(lambda: [0]*self.scores)
+        candidates = defaultdict(lambda: list(self.null_score))  # copy!
         for i, c_s in enumerate(scored):
             for cand, score in c_s.items():
                 candidates[cand][i] = score
