@@ -329,7 +329,23 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         return self._pv.most_similar(positive=[vector], topn=self.size)
 
 
-class SymbolReplacementCandidates(_BaseCandidateGenerator):
+class _NonRankedCandidates(_BaseCandidateGenerator):
+    '''
+    Abstract class for generators without complete ranking.
+    '''
+
+    def candidates(self, mention):
+        return set(self._candidates(mention))
+
+    def scored_candidates(self, mention):
+        return {c: 1. for c in self._candidates(mention)}
+
+    def _candidates(self, mention):
+        '''Iterate over candidate names.'''
+        raise NotImplementedError
+
+
+class SymbolReplacementCandidates(_NonRankedCandidates):
     '''
     Names reachable through symbol/word substitution.
     '''
@@ -377,8 +393,8 @@ class SymbolReplacementCandidates(_BaseCandidateGenerator):
         alts = '|'.join(re.escape(tgt) for tgt in targets)
         return re.compile('({})'.format(alts))
 
-    def candidates(self, mention):
-        return set(self.sorted_candidates(mention))
+    def _candidates(self, mention):
+        return (c for c, _ in self._scored_candidates(mention))
 
     def scored_candidates(self, mention):
         return {c: 1/(s+1) for c, s in self._scored_candidates(mention)}
@@ -425,7 +441,7 @@ class SymbolReplacementCandidates(_BaseCandidateGenerator):
             yield sum(map(bool, comb))
 
 
-class HyperonymCandidates(_BaseCandidateGenerator):
+class HyperonymCandidates(_NonRankedCandidates):
     '''
     Names containing only parts of the mention.
     '''
@@ -453,19 +469,13 @@ class HyperonymCandidates(_BaseCandidateGenerator):
     def _preprocess(self, term):
         return self._token.findall(term.lower())
 
-    def candidates(self, mention):
-        return set(self._candidates(mention))
-
-    def scored_candidates(self, mention):
-        return {c: 1. for c in self._candidates(mention)}
-
     def _candidates(self, mention):
         for token in self._preprocess(mention):
             if token in self._names:
                 yield from self._names[token]
 
 
-class AbbreviationCandidates(_BaseCandidateGenerator):
+class AbbreviationCandidates(_NonRankedCandidates):
     '''
     Derived abbreviations.
     '''
@@ -498,12 +508,6 @@ class AbbreviationCandidates(_BaseCandidateGenerator):
                     initial = token[0]
                     if initial.isalpha():
                         yield initial
-
-    def candidates(self, mention):
-        return set(self._candidates(mention))
-
-    def scored_candidates(self, mention):
-        return {c: 1. for c in self._candidates(mention)}
 
     def _candidates(self, mention):
         yield from self._abbrevs.get(mention, ())
