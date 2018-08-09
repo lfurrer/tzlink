@@ -77,7 +77,7 @@ def _create_model(conf, sampler):
     sem_q, sem_a = (_semantic_layers(conf, e) for e in emb_nodes)
     v_sem = PairwiseSimilarity()([sem_q, sem_a])
     join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_scores, inp_overlap])
-    hidden_layer = Dense(units=2*conf.rank.n_kernels+sampler.cand_gen.scores+2,
+    hidden_layer = Dense(units=K.int_shape(join_layer)[-1],
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
@@ -99,8 +99,7 @@ def _word_layers(conf, sampler):
             e.append(emb_layer(inp))
 
     inp_nodes = inp_q + inp_a
-    emb_nodes = [Concatenate()(e) if len(e) > 1 else e[0]
-                 for e in (emb_q, emb_a)]
+    emb_nodes = [_conditional_concat(e) for e in (emb_q, emb_a)]
 
     return inp_nodes, emb_nodes
 
@@ -120,13 +119,25 @@ def _embedding_layer(econf, matrix=None):
     return layer
 
 
-def _semantic_layers(conf, x):
+def _semantic_layers(conf, inputs):
+    outputs = [_conv_pool_layer(conf, width, inputs)
+               for width in conf.rank.filter_width]
+    return _conditional_concat(outputs)
+
+
+def _conv_pool_layer(conf, width, x):
     x = Conv1D(conf.rank.n_kernels,
-               kernel_size=conf.rank.filter_width,
+               kernel_size=width,
                activation=conf.rank.activation,
               )(x)
     x = GlobalMaxPooling1D()(x)
     return x
+
+
+def _conditional_concat(layers):
+    if len(layers) > 1:
+        return Concatenate()(layers)
+    return layers[0]
 
 
 class PairwiseSimilarity(Layer):
