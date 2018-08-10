@@ -50,13 +50,21 @@ class Sampler:
         logging.info('loading pretrained embeddings...')
         voc_index, emb_matrix = load_wemb(econf)
         logging.info('loading vectorizer...')
-        vectorizer = Vectorizer(econf, voc_index)
-        return EmbeddingInfo(vectorizer, emb_matrix)
+        vectorizers = (Vectorizer(econf, voc_index, size)
+                       for size in ('sample_size', 'context_size'))
+        return EmbeddingInfo(*vectorizers, emb_matrix)
 
     @property
     def vectorizers(self):
-        '''A list of vectorizers, one for each embedding.'''
-        return [self.emb[emb].vectorizer for emb in self.conf.rank.embeddings]
+        '''
+        All vectorizers.
+
+        For each zone (mention/context), there is a list of
+        vectorizers, one for each embedding.
+        '''
+        embs = self.conf.rank.embeddings
+        return {'mention': [self.emb[e].vectorizer for e in embs],
+                'context': [self.emb[e].ctxt_vect for e in embs]}
 
     @property
     def pool(self):
@@ -90,9 +98,9 @@ class Sampler:
     def _samples(self, corpus, oracle):
         ranges = []
         weights = []
-        samples = []  # holds 7-tuples <x_q, x_a, score, overlap, y, cand, ids>
+        samples = []  # holds 9-tuples of arrays
         for item, numbers in self._itercandidates(corpus, oracle):
-            (mention, ref), occs = item
+            (mention, ref, _), occs = item
             offset, length = len(samples), len(numbers)
             ranges.append((offset, offset+length, mention, ref, occs))
             samples.extend(numbers)
@@ -128,7 +136,7 @@ class Sampler:
             yield chunk
 
 
-EmbeddingInfo = namedtuple('EmbeddingInfo', 'vectorizer emb_matrix')
+EmbeddingInfo = namedtuple('EmbeddingInfo', 'vectorizer ctxt_vect emb_matrix')
 
 
 class DataSet:
@@ -165,13 +173,15 @@ class DataSet:
             the occurrences in the corpus.
     '''
     def __init__(self, mentions, weights,
-                 x_q, x_a, x_scores, x_overlap, y,
+                 x_q, x_a, ctxt_q, ctxt_a, x_scores, x_overlap, y,
                  cands, ids):
         # Original data.
         self.mentions = mentions
         # Vectorized data.
-        self.x_q = [np.array(x) for x in zip(*x_q)]
-        self.x_a = [np.array(x) for x in zip(*x_a)]
+        self.x_q = self._word_input_shape(x_q)
+        self.x_a = self._word_input_shape(x_a)
+        self.ctxt_q = self._word_input_shape(ctxt_q)
+        self.ctxt_a = self._word_input_shape(ctxt_a)
         self.x_scores = np.array(x_scores)
         self.x_overlap = np.array(x_overlap)
         self.y = np.array(y)
@@ -184,7 +194,12 @@ class DataSet:
     @property
     def x(self):
         '''List of input tensors.'''
-        return [*self.x_q, *self.x_a, self.x_scores, self.x_overlap]
+        return [*self.x_q, *self.x_a, *self.ctxt_q, *self.ctxt_a,
+                self.x_scores, self.x_overlap]
+
+    @staticmethod
+    def _word_input_shape(vecs):
+        return [np.array(v) for v in zip(*vecs)]
 
 
 def _deduplicated(corpus):
@@ -193,8 +208,9 @@ def _deduplicated(corpus):
         docid = doc['docid']
         for sec in doc['sections']:
             offset = sec['offset']
+            context = sec['text']
             for mention in sec['mentions']:
-                key = mention['text'], mention['id']
+                key = mention['text'], mention['id'], context
                 occ = docid, offset + mention['start'], offset + mention['end']
                 mentions[key].append(occ)
     return mentions
@@ -218,15 +234,31 @@ def _worker_task(arg):
 
 
 def _task(items, oracle, cand_gen, vectorizers):
+    '''
+    Iterate over numeric representations of all samples.
+
+    Returns:
+        iter(list(tuple))
+            Yield a list of samples for each mention.
+            Each sample is a 9-tuple
+            <x_q, x_a, ctxt_q, ctxt_a, scores, overlap, y, cand, ids>.
+    '''
     overlap = TokenOverlap()
-    for mention, samples in cand_gen.samples_many(items, oracle):
-        vec_q = [v.vectorize(mention) for v in vectorizers]
+    def _vectorize(text, zone):
+        return [v.vectorize(text) for v in vectorizers[zone]]
+
+    for mention, ctxt_q, samples in cand_gen.samples_many(items, oracle):
+        vec_q = _vectorize(mention, 'mention')
+        ctxt_q = _vectorize(ctxt_q, 'context')
         data = []
-        for cand, score, label in samples:
-            vec_a = [v.vectorize(cand) for v in vectorizers]
+        for cand, score, ctxt_a, label in samples:
+            vec_a = _vectorize(cand, 'mention')
+            ctxt_a = _vectorize(ctxt_a, 'context')
             data.append((
                 vec_q,
                 vec_a,
+                ctxt_q,
+                ctxt_a,
                 score,
                 overlap.overlap(mention, cand),
                 (float(label),),

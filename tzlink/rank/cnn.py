@@ -70,62 +70,74 @@ def _load(fn):
 
 
 def _create_model(conf, sampler):
-    inp_words, emb_nodes = _word_layers(conf, sampler)
+    inp_mentions, sem_mentions = _semantic_repr(conf, sampler, 'sample_size')
+    inp_context, sem_context = _semantic_repr(conf, sampler, 'context_size')
     inp_scores = Input(shape=(sampler.cand_gen.scores,))
     inp_overlap = Input(shape=(1,))  # token overlap between q and a
 
-    sem_q, sem_a = (_semantic_layers(conf, e) for e in emb_nodes)
-    v_sem = PairwiseSimilarity()([sem_q, sem_a])
-    join_layer = Concatenate()([sem_q, v_sem, sem_a, inp_scores, inp_overlap])
+    v_sem = PairwiseSimilarity()(sem_mentions)
+    join_layer = Concatenate()(
+        [*sem_mentions, v_sem, *sem_context, inp_scores, inp_overlap])
     hidden_layer = Dense(units=K.int_shape(join_layer)[-1],
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(*inp_words, inp_scores, inp_overlap),
+    model = Model(inputs=(*inp_mentions, *inp_context, inp_scores, inp_overlap),
                   outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
 
 
-def _word_layers(conf, sampler):
-    inp_q, inp_a = [], []
-    emb_q, emb_a = [], []
+def _semantic_repr(conf, sampler, size):
+    # Embedding layers are shared between Q and A, but not between mentions
+    # and context, because the text size differs.
+    emb = list(_embedding_info(conf, sampler, size))
+    nodes = (_semantic_layers(conf, emb) for _ in range(2))
+    (inp_q, inp_a), sem = zip(*nodes)
+    return inp_q + inp_a, list(sem)  # zip returns tuples
+
+
+def _semantic_layers(conf, emb_info):
+    inp, emb = _word_layer(emb_info)
+    sem = _conv_pool_layers(conf, emb)
+    return inp, sem
+
+
+def _word_layer(emb_info):
+    inp, emb = [], []
+    for size, emb_layer in emb_info:
+        i = Input(shape=(size,))
+        inp.append(i)
+        emb.append(emb_layer(i))
+    emb = _conditional_concat(emb)
+    return inp, emb
+
+
+def _embedding_info(conf, sampler, size_name):
     for emb in conf.rank.embeddings:
+        size = conf[emb][size_name]
         matrix = sampler.emb[emb].emb_matrix
-        emb_layer = _embedding_layer(conf[emb], matrix)
-        for i, e in ((inp_q, emb_q), (inp_a, emb_a)):
-            inp = Input(shape=(conf[emb].sample_size,))
-            i.append(inp)
-            e.append(emb_layer(inp))
-
-    inp_nodes = inp_q + inp_a
-    emb_nodes = [_conditional_concat(e) for e in (emb_q, emb_a)]
-
-    return inp_nodes, emb_nodes
+        emb_layer = _embedding_layer(conf[emb], matrix, input_length=size)
+        yield size, emb_layer
 
 
-def _embedding_layer(econf, matrix=None):
+def _embedding_layer(econf, matrix=None, **kwargs):
     if matrix is not None:
-        vocab_size, embedding_dim = matrix.shape
-        layer = Embedding(vocab_size,
-                          embedding_dim,
-                          weights=[matrix],
-                          input_length=econf.sample_size,
-                          trainable=econf.trainable)
+        args = matrix.shape
+        kwargs.update(weights=[matrix],
+                      trainable=econf.trainable)
     else:
-        layer = Embedding(econf.embedding_voc,
-                          econf.embedding_dim,
-                          input_length=econf.sample_size)
-    return layer
+        args = (econf.embedding_voc, econf.embedding_dim)
+    return Embedding(*args, **kwargs)
 
 
-def _semantic_layers(conf, inputs):
-    outputs = [_conv_pool_layer(conf, width, inputs)
+def _conv_pool_layers(conf, inputs):
+    outputs = [_convolution_pooling(conf, width, inputs)
                for width in conf.rank.filter_width]
     return _conditional_concat(outputs)
 
 
-def _conv_pool_layer(conf, width, x):
+def _convolution_pooling(conf, width, x):
     x = Conv1D(conf.rank.n_kernels,
                kernel_size=width,
                activation=conf.rank.activation,

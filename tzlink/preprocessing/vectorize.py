@@ -92,9 +92,9 @@ class Vectorizer:
     PAD = 0  # all zeros for padding
     UNK = 1  # random values for "the unknown word"
 
-    def __init__(self, econf, vocab):
+    def __init__(self, econf, vocab, size_name):
         self.vocab = vocab
-        self.length = econf.sample_size  # max number of tokens per vector
+        self.length = econf[size_name]  # max number of tokens per vector
         self._preprocess = get_preprocessing(econf) or identity
         self._tokenize = get_tokenizer(econf)
         if econf.vectorizer_cache:  # trade memory for speed?

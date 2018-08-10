@@ -61,7 +61,7 @@ class _BaseCandidateGenerator:
 
     def samples(self, mention, ref_ids, oracle=0):
         '''
-        Iterate over triples <candidate, score, label>.
+        Iterate over quadruples <candidate, score, definition, label>.
 
         The candidate is a name string.
         The score correspondes to the confidence of the
@@ -85,19 +85,18 @@ class _BaseCandidateGenerator:
         Generate samples for multiple mentions.
 
         Args:
-            items: an iterable of pairs <mention, ref_ids>.
+            items: an iterable of triples <mention, ref_ids, context>.
                 The iterable must allow repeated iteration.
-            oracle: flag for including unreachable positive
-                examples
+            oracle: include unreachable positive examples?
 
         Return a nested iterator:
-            <mention, samples> for each mention
-                <candidate, score, label> for each sample
+            <mention, context, samples> for each mention
+                <candidate, score, definition, label> for each sample
         '''
-        self.precompute([m for m, _ in items])
-        for mention, ref_ids in items:
+        self.precompute([m for m, _, _ in items])
+        for mention, ref_ids, context in items:
             samples = self._samples(mention, ref_ids, oracle)
-            yield mention, samples
+            yield mention, context, samples
 
     def _samples(self, mention, ref_ids, oracle):
         candidates = self.scored_candidates(mention)
@@ -111,11 +110,16 @@ class _BaseCandidateGenerator:
         for subset, label in ((positive, True), (negative, False)):
             for cand in subset:
                 score = candidates.get(cand, self.null_score)
-                yield cand, score, label
+                def_ = self._definition(ref_ids, cand)
+                yield cand, score, def_, label
 
     def _positive_samples(self, ref_ids):
         positive = self.terminology.names(ref_ids)
         return positive
+
+    def _definition(self, ref_ids, name):
+        defs = self.terminology.definitions(ref_ids, name)
+        return max(defs, key=len, default='')
 
     @staticmethod
     def precompute(mentions):

@@ -52,6 +52,18 @@ class Terminology:
                 names.update(e.syn)
         return names
 
+    def definitions(self, ids, name=None):
+        '''
+        Get all definitions given for these IDs.
+
+        If name is given, only include concepts using this name.
+        '''
+        entries = (e for i in ids for e in self._by_id.get(i, ()))
+        if name is not None:
+            entries = set(entries)
+            entries.intersection_update(self._by_name.get(name, ()))
+        return set(e.def_ for e in entries)
+
     def canonical_ids(self, id_):
         '''
         Get the preferred ID of all entries that list this ID as alternative.
