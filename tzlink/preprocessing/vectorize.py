@@ -16,7 +16,7 @@ import numpy as np
 from gensim.models.keyedvectors import KeyedVectors
 
 from .tokenization import create_tokenizer
-from ..util.util import identity
+from ..util.util import identity, CacheDict
 
 
 def load_wemb(econf):
@@ -98,19 +98,16 @@ class Vectorizer:
         self._preprocess = get_preprocessing(econf) or identity
         self._tokenize = get_tokenizer(econf)
         if econf.vectorizer_cache:  # trade memory for speed?
-            self._cache = {}
+            self._cache = CacheDict(self._vectorize)
+            self._call_vectorize = self._cache.__getitem__
         else:
-            self.vectorize = self._vectorize  # hide the cache wrapper method
+            self._call_vectorize = self._vectorize
 
     def vectorize(self, text):
         '''
         Convert a piece of text to a fixed-length integer vector.
         '''
-        try:
-            vector = self._cache[text]
-        except KeyError:
-            vector = self._cache[text] = self._vectorize(text)
-        return vector
+        return self._call_vectorize(text)
 
     def _vectorize(self, text):
         vector = self.indices(text)
