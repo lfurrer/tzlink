@@ -62,9 +62,9 @@ class Sampler:
         For each zone (mention/context), there is a list of
         vectorizers, one for each embedding.
         '''
-        embs = self.conf.rank.embeddings
-        return {'mention': [self.emb[e].vectorizer for e in embs],
-                'context': [self.emb[e].ctxt_vect for e in embs]}
+        embs = [self.emb[e] for e in self.conf.rank.embeddings]
+        return {'mention': [e.vectorizer for e in embs],
+                'context': [e.ctxt_vect for e in embs if e.ctxt_vect.length]}
 
     @property
     def pool(self):

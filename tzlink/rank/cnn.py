@@ -92,6 +92,8 @@ def _semantic_repr(conf, sampler, size):
     # Embedding layers are shared between Q and A, but not between mentions
     # and context, because the text size differs.
     emb = list(_embedding_info(conf, sampler, size))
+    if not emb:
+        return [], []
     nodes = (_semantic_layers(conf, emb) for _ in range(2))
     (inp_q, inp_a), sem = zip(*nodes)
     return inp_q + inp_a, list(sem)  # zip returns tuples
@@ -116,6 +118,8 @@ def _word_layer(emb_info):
 def _embedding_info(conf, sampler, size_name):
     for emb in conf.rank.embeddings:
         size = conf[emb][size_name]
+        if not size:  # sample/context size is 0 -> omit entirely
+            continue
         matrix = sampler.emb[emb].emb_matrix
         emb_layer = _embedding_layer(conf[emb], matrix, input_length=size)
         yield size, emb_layer
