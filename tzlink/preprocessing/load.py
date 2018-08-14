@@ -12,11 +12,13 @@ Common loading utilities.
 from .terminology import Terminology
 from .parse_MEDIC_terminology import parse_MEDIC_terminology
 from .parse_NCBI_disease_corpus import parse_NCBI_disease_corpus
+from .parse_ShARe_CLEF_corpus import parse_ShARe_CLEF_corpus
 
 
 # Make the data/terminology loaders accessible through config names.
 corpus_loader = {
     'ncbi-disease': parse_NCBI_disease_corpus,
+    'share-clef': parse_ShARe_CLEF_corpus,
 }
 dict_loader = {
     'ncbi-disease': parse_MEDIC_terminology,
