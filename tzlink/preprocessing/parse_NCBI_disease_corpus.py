@@ -50,6 +50,7 @@ def _parse_document(lines, terminology):
         cache_dict = {
             'start': int(cache_mention[1]),
             'end': int(cache_mention[2]),
+            'gaps': (),
             'text': cache_mention[3],
             'type': cache_mention[4],
             'id': _ref_id(cache_mention[5], terminology)}
