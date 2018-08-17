@@ -26,21 +26,21 @@ def handle_predictions(conf, data, evaluate=(sys.stdout,),
     '''
     evaluator = Evaluator(conf)
     if predict:
-        evaluator.occ_writers.append(MentionWriter(conf))
+        evaluator.writers.append(SummaryWriter(conf))
     if detailed:
-        evaluator.uniq_writers.append(DetailedWriter(conf))
+        evaluator.writers.append(DetailedWriter(conf))
 
     evaluator.evaluate(data)
 
     for file in evaluate:
         evaluator.summary(file)
-    for writer in evaluator.occ_writers + evaluator.uniq_writers:
+    for writer in evaluator.writers:
         writer.dump()
 
 
-class MentionWriter:
+class SummaryWriter:
     '''
-    Write a TSV line for each occurrence of a mention.
+    Write a summary line for each occurrence of a mention.
     '''
 
     fields = (
@@ -59,9 +59,11 @@ class MentionWriter:
         self.fn = conf.logging.prediction_fn
         self._entries = []
 
-    def update(self, entry):
-        '''Add a sequence of 9 elements.'''
-        self._entries.append(entry)
+    def update(self, mention, refs, occs, _, decision):
+        '''Update with outcome information per occurrence.'''
+        for occ in occs:
+            entry = (*occ, mention, refs, *decision)
+            self._entries.append(entry)
 
     def dump(self):
         '''Sort and serialise all entries.'''
@@ -131,10 +133,9 @@ class Evaluator:
     '''
     Count a selection of outcomes and compute accuracy.
     '''
-    def __init__(self, conf, occ_writers=(), uniq_writers=()):
+    def __init__(self, conf, writers=()):
         self.conf = conf
-        self.occ_writers = list(occ_writers)
-        self.uniq_writers = list(uniq_writers)
+        self.writers = list(writers)
 
         self.correct = 0
         self.total = 0
@@ -163,13 +164,10 @@ class Evaluator:
         for scores, ids, cands, mention, refs, occs in self._iterranges(data):
             ranking = sorted(zip(scores, cands, ids), reverse=True)
             decision = self._decide(ranking, ids, refs)
-            for writer in self.uniq_writers:
+            for writer in self.writers:
                 writer.update(mention, refs, occs, ranking, decision)
-            for occ in occs:
+            for _ in occs:
                 self._update(*decision[1:])
-                entry = (*occ, mention, refs, *decision)
-                for writer in self.occ_writers:
-                    writer.update(entry)
 
     @staticmethod
     def _iterranges(data):
