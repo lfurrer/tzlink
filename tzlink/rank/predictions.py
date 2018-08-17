@@ -80,12 +80,13 @@ class DetailedWriter:
     '''
     def __init__(self, conf):
         self.fn = conf.logging.detailed_fn
-        self._entries = {'correct': {}, 'reachable': {}, 'unreachable': {}}
+        self._entries = {'correct': [], 'reachable': [], 'unreachable': []}
 
     def update(self, mention, refs, occs, ranking, outcome):
         '''Update with a distinct mention.'''
         category, pred = self._outcome(outcome)
-        self._entries[category][str(refs), mention] = (occs, pred, ranking)
+        entry = (str(refs), mention, occs, pred, ranking)
+        self._entries[category].append(entry)
 
     def dump(self):
         '''Write to disk.'''
@@ -93,11 +94,11 @@ class DetailedWriter:
             with smart_open(self.fn.format(category), 'w') as f:
                 writer = csv.writer(f, quotechar=None,
                                     delimiter='\t', lineterminator='\n')
-                writer.writerows(self._iterentries(category))
+                writer.writerows(self._iterentries(self._entries[category]))
 
-    def _iterentries(self, category):
-        entries = sorted(self._entries[category].items())
-        for (refs, mention), (occs, pred, ranking) in entries:
+    def _iterentries(self, entries):
+        entries.sort()
+        for refs, mention, occs, pred, ranking in entries:
             yield ('Concept:', refs)
             yield ('Term:', mention)
             yield ('Occs:', self._occ_summary(occs))
