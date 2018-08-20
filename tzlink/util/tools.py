@@ -3,7 +3,7 @@
 
 
 from ..conf.config import Config
-from ..preprocessing.load import load_dict
+from ..datasets.load import load_dict
 
 import logging
 import re

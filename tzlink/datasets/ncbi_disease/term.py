@@ -11,7 +11,7 @@ Parse the MEDIC terminology used for the NCBI disease corpus.
 
 import csv
 
-from .terminology import DictEntry
+from ..terminology import DictEntry
 
 
 def parse_MEDIC_terminology(source):

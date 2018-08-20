@@ -15,7 +15,7 @@ from collections import defaultdict, namedtuple
 
 import numpy as np
 
-from .load import load_data, load_dict
+from ..datasets.load import load_data, load_dict
 from .vectorize import load_wemb, Vectorizer
 from .overlap import TokenOverlap
 from ..candidates.generate_candidates import candidate_generator
