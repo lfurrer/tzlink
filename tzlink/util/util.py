@@ -113,3 +113,18 @@ class OrderedCounter(Counter, OrderedDict):
 
     When using .most_common(), ties are broken by insertion order.
     '''
+
+
+def co_init(func):
+    '''
+    Decorator for initializing a coroutine.
+
+    Before something can be sent to a generator, it needs
+    to be fast-forwarded to the first yield statement.
+    This decorator takes care of this.
+    '''
+    def _wrap(*args, **kwargs):
+        cr = func(*args, **kwargs)
+        next(cr)
+        return cr
+    return _wrap

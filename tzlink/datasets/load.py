@@ -11,7 +11,7 @@ Dataset loading utilities.
 
 from .terminology import Terminology
 from .ncbi_disease import parse_MEDIC_terminology, parse_NCBI_disease_corpus
-from .share_clef import parse_ShARe_CLEF_corpus
+from .share_clef import parse_ShARe_CLEF_corpus, parse_SNOMED_terminology
 
 
 # Make the data/terminology loaders accessible through config names.
@@ -21,6 +21,7 @@ corpus_loader = {
 }
 dict_loader = {
     'ncbi-disease': parse_MEDIC_terminology,
+    'share-clef': parse_SNOMED_terminology,
 }
 
 def load_data(conf, subset, terminology=None):

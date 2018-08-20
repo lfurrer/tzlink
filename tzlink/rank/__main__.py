@@ -14,7 +14,7 @@ def main():
     '''
     Run as script.
     '''
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description='Run the CNN.')
     ap.add_argument(
         '-t', '--train', action='store_true',
         help='train a new CNN ranking model '
