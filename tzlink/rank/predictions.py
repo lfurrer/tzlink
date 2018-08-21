@@ -59,7 +59,7 @@ class SummaryWriter:
         self.fn = conf.logging.prediction_fn
         self._entries = []
 
-    def update(self, mention, refs, occs, _, decision):
+    def update(self, mention, refs, occs, _, _, decision):
         '''Update with outcome information per occurrence.'''
         for occ in occs:
             entry = (*occ, mention, refs, *decision)
@@ -84,7 +84,7 @@ class DetailedWriter:
         self.fn = conf.logging.detailed_fn
         self._entries = {'correct': [], 'reachable': [], 'unreachable': []}
 
-    def update(self, mention, refs, occs, ranking, outcome):
+    def update(self, mention, refs, occs, _, ranking, outcome):
         '''Update with a distinct mention.'''
         category, pred = self._outcome(outcome)
         entry = (str(refs), mention, occs, pred, ranking)
@@ -161,11 +161,11 @@ class Evaluator:
         '''
         Evaluate all predictions and push entries to the writers.
         '''
-        for scores, ids, cands, mention, refs, occs in self._iterranges(data):
+        for scores, ids, cands, y, mention, refs, occs in self._iterranges(data):
             ranking = sorted(zip(scores, cands, ids), reverse=True)
             decision = self._decide(ranking, ids, refs)
             for writer in self.writers:
-                writer.update(mention, refs, occs, ranking, decision)
+                writer.update(mention, refs, occs, y, ranking, decision)
             for _ in occs:
                 self._update(*decision[1:])
 
@@ -175,7 +175,8 @@ class Evaluator:
             scores = data.scores[start:end, 0]
             ids = data.ids[start:end]
             cands = data.candidates[start:end]
-            yield (scores, ids, cands, *annotation)
+            labels = data.y[start:end]
+            yield (scores, ids, cands, labels, *annotation)
 
     def _decide(self, scored, ids, refs):
         id_ = self._disambiguate(scored)
