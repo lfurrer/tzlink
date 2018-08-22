@@ -20,7 +20,7 @@ NIL = 'NIL'
 
 
 def handle_predictions(conf, data, evaluate=(sys.stdout,),
-                       predict=False, detailed=False):
+                       predict=False, detailed=False, evaluation=False):
     '''
     Write predictions to TSV files and/or print evaluation figures.
     '''
@@ -29,6 +29,8 @@ def handle_predictions(conf, data, evaluate=(sys.stdout,),
         evaluator.writers.append(SummaryWriter(conf))
     if detailed:
         evaluator.writers.append(DetailedWriter(conf))
+    if evaluation:
+        evaluator.writers.append(EvaluationWriter(conf))
 
     evaluator.evaluate(data)
 
@@ -59,7 +61,7 @@ class SummaryWriter:
         self.fn = conf.logging.prediction_fn
         self._entries = []
 
-    def update(self, mention, refs, occs, _, _, decision):
+    def update(self, mention, refs, occs, _potato1, _potato2, decision):
         '''Update with outcome information per occurrence.'''
         for occ in occs:
             entry = (*occ, mention, refs, *decision)
@@ -128,6 +130,38 @@ class DetailedWriter:
             category = 'unreachable'
         return category, id_
 
+class EvaluationWriter:
+    '''
+    Write two scripts for trec evaluation.
+    Prediction file format:
+    qid, 0, docno, 0, sim, 0
+    Gold file format:
+    qid, 0, docno, label
+    '''
+
+    def __init__(self, conf):
+        self.fn = conf.logging.trec_eva_fn
+        self._entries = {'prediction': [], 'gold': []}
+
+    def update(self, _mention, _refs, occs, label, ranking,_outcome):
+        #writer.update(candidate, refs, start,occs)
+        '''Add a sequence of 6 and 4 elements respectively'''
+        for occ in occs:
+            for candidate,correct in zip(ranking,label):
+                qid = occ[0]+str(occ[1])
+                docno = candidate[0]
+                sim = candidate[1]
+                entry_prediction = (qid,0,docno,0,sim,0)
+                entry_gold = (qid,0,docno,correct[0])
+                self._entries['prediction'].append(entry_prediction)
+                self._entries['gold'].append(entry_gold)
+
+    def dump(self):
+        for category in self._entries:
+            with smart_open(self.fn.format(category),'w') as f:
+                writer = csv.writer(f, quotechar=None,
+                                   delimiter='\t', lineterminator='\n')
+                writer.writerow(self._entries[category])
 
 class Evaluator:
     '''
