@@ -1,6 +1,8 @@
 # Large blobs
 data/embeddings
 data/ncbi-disease/
+data/backup_trec
+data/tmpt9w1zrnf
 
 # Generated output
 runs/

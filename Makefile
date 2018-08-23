@@ -8,7 +8,7 @@ optional: bpe embeddings-chiu
 
 # Run target: train a model and evaluate it.
 run:
-	python3 -m tzlink.rank -m -e -r
+	python3 -m tzlink.rank -m /home/lhchan/disease-normalization/data/backup_trec/tmpu2ldh8e4 -e -r
 
 
 # Intermediate targets: specific paths.

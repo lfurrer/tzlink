@@ -149,8 +149,8 @@ class EvaluationWriter:
         for occ in occs:
             for candidate,correct in zip(ranking,label):
                 qid = occ[0]+str(occ[1])
-                docno = candidate[0]
-                sim = candidate[1]
+                docno = candidate[2]
+                sim = candidate[0]
                 entry_prediction = (qid,0,docno,0,sim,0)
                 entry_gold = (qid,0,docno,correct[0])
                 self._entries['prediction'].append(entry_prediction)
@@ -161,7 +161,7 @@ class EvaluationWriter:
             with smart_open(self.fn.format(category),'w') as f:
                 writer = csv.writer(f, quotechar=None,
                                    delimiter='\t', lineterminator='\n')
-                writer.writerow(self._entries[category])
+                writer.writerows(self._entries[category])
 
 class Evaluator:
     '''
