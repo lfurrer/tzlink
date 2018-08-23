@@ -149,7 +149,7 @@ class TRECWriter:
             qid = '{}-{}-{}'.format(*occ)
             for (score, _, ids), correct in zip(ranking, label):
                 entry_prediction = (qid, 0, ids, 0, score, 0)
-                entry_gold = (qid, 0, ids, correct[0])
+                entry_gold = (qid, 0, ids, int(correct))
                 self._entries['prediction'].append(entry_prediction)
                 self._entries['gold'].append(entry_gold)
 
@@ -207,7 +207,7 @@ class Evaluator:
             scores = data.scores[start:end, 0]
             ids = data.ids[start:end]
             cands = data.candidates[start:end]
-            labels = data.y[start:end]
+            labels = data.y[start:end, 0]
             yield (scores, ids, cands, labels, *annotation)
 
     def _decide(self, scored, ids, refs):
