@@ -16,9 +16,6 @@ from collections import Counter
 from ..util.util import smart_open
 
 
-NIL = 'NIL'
-
-
 def handle_predictions(conf, data, evaluate=(sys.stdout,),
                        predict=False, detailed=False):
     '''
@@ -59,7 +56,7 @@ class SummaryWriter:
         self.fn = conf.logging.prediction_fn
         self._entries = []
 
-    def update(self, mention, refs, occs, _, _, decision):
+    def update(self, mention, refs, occs, _y, _r, decision):
         '''Update with outcome information per occurrence.'''
         for occ in occs:
             entry = (*occ, mention, refs, *decision)
@@ -190,11 +187,11 @@ class Evaluator:
             score, _, top_ids = scored[0]
         except IndexError:
             # No candidates.
-            return NIL
+            return self.conf.general.nil_symbol
 
         if score < self.conf.rank.min_score:
             # Score too low.
-            return NIL
+            return self.conf.general.nil_symbol
 
         if len(top_ids) == 1:
             # Unambiguous case.
