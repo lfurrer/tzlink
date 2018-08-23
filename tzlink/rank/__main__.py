@@ -26,6 +26,9 @@ def main():
         '-d', '--detailed', action='store_true',
         help='produce a rich output file for inspecting ranking decisions')
     ap.add_argument(
+        '-e', '--trec-eval', action='store_true',
+        help='produce two tables for evaluation with TREC')
+    ap.add_argument(
         '-r', '--record', action='store_true',
         help='create a summary with results and config info')
     ap.add_argument(

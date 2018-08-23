@@ -17,7 +17,7 @@ from ..util.util import smart_open
 
 
 def handle_predictions(conf, data, evaluate=(sys.stdout,),
-                       predict=False, detailed=False):
+                       predict=False, detailed=False, trec_eval=False):
     '''
     Write predictions to TSV files and/or print evaluation figures.
     '''
@@ -26,6 +26,8 @@ def handle_predictions(conf, data, evaluate=(sys.stdout,),
         evaluator.writers.append(SummaryWriter(conf))
     if detailed:
         evaluator.writers.append(DetailedWriter(conf))
+    if trec_eval:
+        evaluator.writers.append(TRECWriter(conf))
 
     evaluator.evaluate(data)
 
@@ -125,6 +127,39 @@ class DetailedWriter:
             category = 'unreachable'
         return category, id_
 
+
+class TRECWriter:
+    '''
+    Write two tables for TREC evaluation.
+
+    Prediction file format:
+        qid, 0, docno, 0, sim, 0
+
+    Gold file format:
+        qid, 0, docno, label
+    '''
+
+    def __init__(self, conf):
+        self.fn = conf.logging.trec_eva_fn
+        self._entries = {'prediction': [], 'gold': []}
+
+    def update(self, _mention, _refs, occs, label, ranking, _outcome):
+        '''Add a sequence of 6 and 4 elements respectively'''
+        for occ in occs:
+            qid = '{}-{}-{}'.format(*occ)
+            for (score, _, ids), correct in zip(ranking, label):
+                entry_prediction = (qid, 0, ids, 0, score, 0)
+                entry_gold = (qid, 0, ids, correct[0])
+                self._entries['prediction'].append(entry_prediction)
+                self._entries['gold'].append(entry_gold)
+
+    def dump(self):
+        '''Write to disk.'''
+        for category in self._entries:
+            with smart_open(self.fn.format(category), 'w') as f:
+                writer = csv.writer(f, quotechar=None,
+                                    delimiter='\t', lineterminator='\n')
+                writer.writerows(self._entries[category])
 
 class Evaluator:
     '''

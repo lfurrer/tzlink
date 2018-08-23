@@ -1,6 +1,5 @@
 # Large blobs
-data/embeddings
-data/ncbi-disease/
+data/
 
 # Generated output
 runs/
