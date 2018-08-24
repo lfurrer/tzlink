@@ -147,8 +147,8 @@ class TRECWriter:
         '''Add a sequence of 6 and 4 elements respectively'''
         for occ in occs:
             qid = '{}-{}-{}'.format(*occ)
-            for (score, _, ids), correct in zip(ranking, label):
-                docno = '/'.join(sorted(ids))
+            for (score, _, _), correct in zip(ranking, label):
+                docno = len(self._entries['gold'])
                 entry_prediction = (qid, 0, docno, 0, score, 0)
                 entry_gold = (qid, 0, docno, int(correct))
                 self._entries['prediction'].append(entry_prediction)
@@ -161,6 +161,7 @@ class TRECWriter:
                 writer = csv.writer(f, quotechar=None,
                                     delimiter='\t', lineterminator='\n')
                 writer.writerows(self._entries[category])
+
 
 class Evaluator:
     '''
