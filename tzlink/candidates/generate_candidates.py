@@ -114,12 +114,21 @@ class _BaseCandidateGenerator:
                 yield cand, score, def_, label
 
     def _positive_samples(self, ref_ids):
+        self.terminology_update(ref_ids)
         positive = self.terminology.names(ref_ids)
         return positive
 
     def _definition(self, ref_ids, name):
         defs = self.terminology.definitions(ref_ids, name)
         return max(defs, key=len, default='')
+
+    @staticmethod
+    def terminology_update(ref_ids):
+        '''
+        Subclass hook for dynamic terminology changes.
+        '''
+        # Default is a no-op.
+        del ref_ids
 
     @staticmethod
     def precompute(mentions):
@@ -157,6 +166,10 @@ class _MultiGenerator(_BaseCandidateGenerator):
         self.generators = generators
         self.scores = len(self.generators)
         self.null_score = [g.null_score for g in self.generators]
+
+    def terminology_update(self, ref_ids):
+        for g in self.generators:
+            g.terminology_update(ref_ids)
 
     def candidates(self, mention):
         return set().union(*(g.candidates(mention) for g in self.generators))

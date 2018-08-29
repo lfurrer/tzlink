@@ -27,13 +27,31 @@ class Terminology:
 
     def _index(self, entries):
         for entry in entries:
-            self._add(self._by_name, entry, entry.name, entry.syn)
-            self._add(self._by_id, entry, entry.id, entry.alt)
+            self.add(entry)
+
+    def add(self, entry):
+        '''
+        Update the terminology with a DictEntry object.
+        '''
+        self._add(self._by_name, entry, entry.name, entry.syn)
+        self._add(self._by_id, entry, entry.id, entry.alt)
 
     @staticmethod
     def _add(index, entry, main, secondary):
         for elem in (main, *secondary):
             index.setdefault(elem, []).append(entry)
+
+    def has_id(self, id_):
+        '''
+        Is there an entry with this ID (canonical or alternative)?
+        '''
+        return id_ in self._by_id
+
+    def has_name(self, name):
+        '''
+        Is there an entry mentioning this name?
+        '''
+        return name in self._by_name
 
     def ids(self, names):
         '''
