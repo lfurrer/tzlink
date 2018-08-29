@@ -18,6 +18,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from gensim.models.keyedvectors import KeyedVectors, Vocab
 
+from ..datasets.terminology import DictEntry
 from ..util.util import identity, OrderedCounter
 
 
@@ -46,6 +47,7 @@ def _create_generator(value, sampler):
         'symbolreplacement': SymbolReplacementCandidates,
         'hyperonym': HyperonymCandidates,
         'abbreviation': AbbreviationCandidates,
+        'composite': CompositeCandidates,
     }[name.lower()]
     if args:
         args = ast.literal_eval(args)
@@ -296,6 +298,7 @@ class SGramCosineCandidates(_BaseCandidateGenerator):
             sim, self.size, self.threshold, self._names)
 
     def topN(self, mention, candidates, n):
+        candidates = [c for c in candidates if c in self._name_index]
         cand_i = [self._name_index[c] for c in candidates]
         sim = self._similarities(mention, limit=cand_i)
         return (c for c, _ in self._select_candidates(sim, n, 0, candidates))
@@ -385,6 +388,7 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         return self._pv.most_similar(positive=[vector], topn=self.size)
 
     def topN(self, mention, candidates, n):
+        candidates = [c for c in candidates if c in self._pv.vocab]
         cand_i = [self._pv.vocab[c].index for c in candidates]
         cand_matrix = self._pv.syn0[cand_i]
         sim = cand_matrix.dot(self._phrase_vector(mention))
@@ -583,6 +587,100 @@ class AbbreviationCandidates(_NonRankedCandidates):
 
     def _candidates(self, mention):
         yield from self._abbrevs.get(mention, ())
+
+
+class CompositeCandidates(_NonRankedCandidates):
+    '''
+    Detect and decompose syntactically conflated terms.
+
+    Address cases like "colorectal, endometrial, and ovarian cancers".
+
+    This candidate generator does two things:
+     1. It detects cases like the above and creates an
+        unfolded candidate name like "colorectal cancers
+        and endometrial cancers and ovarian cancers".
+        This is done by combining existing terminology
+        entries with the string " and ".
+     2. It detects reference IDs that are linked to
+        composite mentions and updates the terminology
+        (a shared object controlled by the sampler) with
+        new entries, constructed in the same way as above
+        (concatenating names with " and ").
+    These two actions are independent of one another.
+    '''
+
+    def __init__(self, shared):
+        super().__init__(shared)
+        self._name_index = self._index_names()
+        self._seen = set()
+        self._trigger = re.compile(r'\b(?:and/or|and|or|/)\b')
+
+    def _index_names(self):
+        index = {}
+        for name in self.terminology.iter_names():
+            tokens = self._tokenize(name)
+            index.setdefault(tokens, []).append(name)
+        return index
+
+    @staticmethod
+    def _tokenize(text):
+        return tuple(re.findall(r'\w+', text.lower()))
+
+    def terminology_update(self, ref_ids):
+        '''
+        Create new dict entries for composite mentions.
+        '''
+        if ref_ids in self._seen:
+            return
+        self._seen.add(ref_ids)
+
+        for id_ in ref_ids:
+            if '|' not in id_:
+                continue
+            components = id_.split('|')
+            comp_names = [self.terminology.names([i]) for i in components]
+            names = tuple(self._compose(comp_names))
+            if names:
+                entry = DictEntry(names[0], id_, (), '', names[1:])
+                self.terminology.add(entry)
+
+    @staticmethod
+    def _compose(comp_names):
+        for combination in it.product(*comp_names):
+            yield ' and '.join(combination)
+
+    def _candidates(self, mention):
+        for unfolding in self._unfold(mention):
+            comp_names = [self._name_index.get(n, ()) for n in unfolding]
+            yield from self._compose(comp_names)
+
+    def _unfold(self, mention):
+        '''
+        Iterate over possible unfoldings.
+
+        Convert "mod1, mod2 and mod_3 head" to
+        [mod1+head, mod2+head, mod3+head].
+
+        If there is no trigger ("and" etc.), yield nothing.
+        If the part after the trigger has n tokens,
+        yield n-1 items, one for each possible split into
+        modifier/head.
+
+        Each item is a list of modifier/head combinations.
+        Each modifier/head combination is a tuple of tokens.
+        '''
+        try:
+            mods, full = self._trigger.split(mention)
+        except ValueError:  # too few or too many parts
+            return
+        mods = mods.strip().strip(',').split(',')
+        *mods, full = (self._tokenize(p) for p in (*mods, full))
+        mods = [mod for mod in mods if mod]  # remove empty matches
+        if not mods:
+            return
+        for i in range(1, len(full)):
+            last_mod, head = full[:i], full[i:]
+            yield [mod+head for mod in (*mods, last_mod)]
 
 
 def L2normalize(vector):
