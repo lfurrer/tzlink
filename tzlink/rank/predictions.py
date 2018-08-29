@@ -140,16 +140,17 @@ class TRECWriter:
     '''
 
     def __init__(self, conf):
-        self.fn = conf.logging.trec_eva_fn
+        self.fn = conf.logging.trec_eval_fn
         self._entries = {'prediction': [], 'gold': []}
 
     def update(self, _mention, _refs, occs, label, ranking, _outcome):
         '''Add a sequence of 6 and 4 elements respectively'''
         for occ in occs:
             qid = '{}-{}-{}'.format(*occ)
-            for (score, _, ids), correct in zip(ranking, label):
-                entry_prediction = (qid, 0, ids, 0, score, 0)
-                entry_gold = (qid, 0, ids, int(correct))
+            for (score, _, _), correct in zip(ranking, label):
+                docno = len(self._entries['gold'])
+                entry_prediction = (qid, 0, docno, 0, score, 0)
+                entry_gold = (qid, 0, docno, int(correct))
                 self._entries['prediction'].append(entry_prediction)
                 self._entries['gold'].append(entry_gold)
 
@@ -160,6 +161,7 @@ class TRECWriter:
                 writer = csv.writer(f, quotechar=None,
                                     delimiter='\t', lineterminator='\n')
                 writer.writerows(self._entries[category])
+
 
 class Evaluator:
     '''
