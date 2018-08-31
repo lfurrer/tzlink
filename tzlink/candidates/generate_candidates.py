@@ -363,6 +363,8 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
 
     def _phrase_vector(self, phrase):
         indices = self._vectorizer.indices(phrase)
+        if not indices:
+            indices = [self._vectorizer.PAD]  # avoid empty arrays
         vectors = [self._wv[i] for i in indices]
         phrase = self.combine(vectors, axis=0)
         L2normalize(phrase)
