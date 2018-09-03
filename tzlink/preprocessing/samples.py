@@ -36,17 +36,19 @@ class Sampler:
     def __init__(self, conf):
         self.conf = conf
 
-        self.terminology = None
+        # All attributes are loaded lazily.
+        self._terminology = None
         self.emb = CacheDict(self._load_embeddings)
-        self.cand_gen = None
+        self._cand_gen = None
         self._pool = None
-        self._load()
 
-    def _load(self):
-        logging.info('loading terminology...')
-        self.terminology = load_dict(self.conf)
-        logging.info('loading candidate generator...')
-        self.cand_gen = candidate_generator(self)
+    @property
+    def terminology(self):
+        '''Indexed terminology.'''
+        if self._terminology is None:
+            logging.info('loading terminology...')
+            self._terminology = load_dict(self.conf)
+        return self._terminology
 
     def _load_embeddings(self, which):
         econf = self.conf[which]
@@ -56,6 +58,14 @@ class Sampler:
         vectorizers = (Vectorizer(econf, voc_index, size)
                        for size in ('sample_size', 'context_size'))
         return EmbeddingInfo(*vectorizers, emb_matrix)
+
+    @property
+    def cand_gen(self):
+        '''Candidate generator.'''
+        if self._cand_gen is None:
+            logging.info('loading candidate generator...')
+            self._cand_gen = candidate_generator(self)
+        return self._cand_gen
 
     @property
     def vectorizers(self):
