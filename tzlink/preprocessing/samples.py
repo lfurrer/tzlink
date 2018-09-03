@@ -9,7 +9,10 @@ Create training samples from input documents.
 '''
 
 
+import io
+import pickle
 import logging
+import tarfile
 import multiprocessing as mp
 from collections import defaultdict, namedtuple
 
@@ -19,7 +22,7 @@ from ..datasets.load import load_data, load_dict
 from .vectorize import load_wemb, Vectorizer
 from .overlap import TokenOverlap
 from ..candidates.generate_candidates import candidate_generator
-from ..util.util import CacheDict
+from ..util.util import CacheDict, TypeHider
 
 
 class Sampler:
@@ -200,6 +203,92 @@ class DataSet:
     @staticmethod
     def _word_input_shape(vecs):
         return [np.array(v) for v in zip(*vecs)]
+
+    def save(self, file):
+        '''
+        Export data to a gzipped tar file.
+        '''
+        with tarfile.open(fileobj=file, mode='w:gz') as tar:
+            for name, bio in self._serialized_items():
+                info = tarfile.TarInfo(name)
+                info.size = bio.getbuffer().nbytes
+                tar.addfile(info, bio)
+
+    def _serialized_items(self):
+        yield 'self', self._serialize(self, array=False)
+
+        for name, value in self.__dict__.items():
+            if self._picklable(value):
+                continue
+            if isinstance(value, list):
+                for i, v in enumerate(value):
+                    n = '{}.{}'.format(name, i)
+                    yield n, self._serialize(v)
+            else:
+                yield name, self._serialize(value)
+
+    @staticmethod
+    def _serialize(value, array=True):
+        bio = io.BytesIO()
+        if array:
+            np.save(bio, value)
+        else:
+            pickle.dump(value, bio)
+        bio.seek(0)  # prepare for reading later
+        return bio
+
+    def __getstate__(self):
+        '''
+        Prevent pickling of numpy arrays.
+        '''
+        state = {name: value if self._picklable(value) else None
+                 for name, value in self.__dict__.items()}
+        return state
+
+    @staticmethod
+    def _picklable(obj):
+        if isinstance(obj, np.ndarray):
+            return False
+        if isinstance(obj, list) and obj and isinstance(obj[0], np.ndarray):
+            return False
+        return True
+
+    @classmethod
+    def load(cls, file):
+        '''
+        Create a DataSet instance from a tar.gz created with save().
+        '''
+        with tarfile.open(fileobj=file) as tar:
+            members = iter(tar)
+            info = next(members)
+            if info.name != 'self':
+                raise ValueError(
+                    'invalid DataSet dump: expected "self" as first member')
+            with tar.extractfile(info) as f:
+                dataset = pickle.load(f)
+
+            for info in members:
+                with tar.extractfile(info) as f:
+                    # Workaround: tar.extractfile returns a BufferedReader
+                    # object, which makes np.load think it is a "real" file.
+                    # It tries to load the data using np.fromfile, which fails.
+                    # The TypeHider wraps the file-like object in a different
+                    # type, while still offering all (non-special) methods and
+                    # attributes.
+                    array = np.load(TypeHider(f))
+                    cls._add_array(dataset.__dict__, info.name, array)
+        return dataset
+
+    @staticmethod
+    def _add_array(attribs, name, array):
+        try:
+            name, i = name.split('.')
+        except ValueError:
+            attribs[name] = array
+        else:
+            if i == '0':
+                attribs[name] = []
+            attribs[name].append(array)
 
 
 def _deduplicated(corpus):

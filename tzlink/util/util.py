@@ -128,3 +128,21 @@ def co_init(func):
         next(cr)
         return cr
     return _wrap
+
+
+class TypeHider:
+    '''
+    Transparent wrapper around an arbitrary object.
+
+    This class allows hiding the true type of an object
+    while keeping its functionality.
+    It is designed for read-only objects and it does not
+    work for implicit invocation of special methods (eg.
+    `len(typehidden)` will raise an AttributeError).
+    '''
+
+    def __init__(self, obj):
+        self._obj = obj
+
+    def __getattr__(self, name):
+        return getattr(self._obj, name)
