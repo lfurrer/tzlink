@@ -10,9 +10,11 @@ Create training samples from input documents.
 
 
 import io
+import os
 import pickle
 import logging
 import tarfile
+import hashlib
 import multiprocessing as mp
 from collections import defaultdict, namedtuple
 
@@ -22,7 +24,7 @@ from ..datasets.load import load_data, load_dict
 from .vectorize import load_wemb, Vectorizer
 from .overlap import TokenOverlap
 from ..candidates.generate_candidates import candidate_generator
-from ..util.util import CacheDict, TypeHider
+from ..util.util import CacheDict, TypeHider, smart_open
 
 
 class Sampler:
@@ -105,14 +107,26 @@ class Sampler:
         '''
         Create vectorized samples with labels for training or prediction.
         '''
-        corpus = load_data(self.conf, subset, self.terminology)
-        return self._samples(corpus, oracle)
+        if not self.conf.general.dataset_cache:
+            return self._samples(subset, oracle)
 
-    def _samples(self, corpus, oracle):
+        cache_fn = self._cached_dataset_fn(subset, oracle)
+        if os.path.exists(cache_fn):
+            logging.info('loading cached dataset from %s', cache_fn)
+            with smart_open(cache_fn, 'rb') as f:
+                data = DataSet.load(f)
+        else:
+            data = self._samples(subset, oracle)
+            logging.info('saving cached dataset at %s', cache_fn)
+            with smart_open(cache_fn, 'wb') as f:
+                data.save(f)
+        return data
+
+    def _samples(self, subset, oracle):
         ranges = []
         weights = []
         samples = []  # holds 9-tuples of arrays
-        for item, numbers in self._itercandidates(corpus, oracle):
+        for item, numbers in self._itercandidates(subset, oracle):
             (mention, ref, _), occs = item
             offset, length = len(samples), len(numbers)
             ranges.append((offset, offset+length, mention, ref, occs))
@@ -123,8 +137,9 @@ class Sampler:
                      len(data.y), sum(data.weights))
         return data
 
-    def _itercandidates(self, corpus, oracle):
+    def _itercandidates(self, subset, oracle):
         logging.info('loading corpus...')
+        corpus = load_data(self.conf, subset, self.terminology)
         mentions = _deduplicated(corpus)
         workers = self.conf.candidates.workers
         logging.info('generating candidates with %d workers...', workers)
@@ -147,6 +162,32 @@ class Sampler:
                 chunk = []
         if chunk:
             yield chunk
+
+    def _cached_dataset_fn(self, subset, oracle):
+        confhash = self._confhash(subset, oracle)
+        return self.conf.general.dataset_cache.format(confhash)
+
+    def _confhash(self, subset, oracle):
+        '''
+        Assemble all relevant settings into a hash key.
+        '''
+        h = hashlib.sha1()
+        def _add(obj):
+            h.update(repr(obj).encode('utf8'))
+
+        _add(subset)
+        _add(oracle)
+        _add(self.conf.candidates.generator)
+        _add(self.conf.rank.embeddings)
+
+        ignored = {'rootpath', 'timestamp', 'workers'}
+        for section in sorted(self.conf):
+            if section.startswith('emb') or section == self.conf.general.dataset:
+                for name in sorted(self.conf[section]):
+                    if name not in ignored:
+                        _add(self.conf[section][name])
+
+        return h.hexdigest()
 
 
 EmbeddingInfo = namedtuple('EmbeddingInfo', 'vectorizer ctxt_vect emb_matrix')

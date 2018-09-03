@@ -29,6 +29,10 @@ class _Namespace:
     def __setitem__(self, name, value):
         setattr(self, name, value)
 
+    def __iter__(self):
+        '''Iterate over the names.'''
+        return iter(self.__dict__)
+
 
 class Config(_Namespace):
     '''
@@ -61,6 +65,11 @@ class Config(_Namespace):
 
         # Publicly accessible attribute: serialized config file.
         self.dump = self._save_dump(parser, dynamic_defaults)
+
+    def __iter__(self):
+        for name in super().__iter__():
+            if name != 'dump':
+                yield name
 
     @staticmethod
     def _save_dump(parser, dynamic_defaults):
