@@ -28,7 +28,8 @@ def load_wemb(econf):
         wv = KeyedVectors.load(fn, mmap='r')
     else:
         wv = KeyedVectors.load_word2vec_format(fn, binary=fn.endswith('.bin'))
-    vocab, matrix = _adapt_mapping(econf, wv)
+    matrix = wv.syn0
+    vocab = _adapt_mapping(econf, wv)
 
     # Add two rows in the beginning: one for padding and one for unknown words.
     dim = matrix.shape[1]
@@ -36,7 +37,7 @@ def load_wemb(econf):
     padding = np.zeros(dim, dtype)
     unknown = np.random.standard_normal(dim).astype(dtype)
     matrix = np.concatenate([[padding, unknown], matrix])
-    lookup = {w: i for i, w in enumerate(vocab, 2)}
+    lookup = {w: e.index+2 for w, e in vocab.items()}
     return lookup, matrix
 
 
@@ -46,15 +47,14 @@ def _adapt_mapping(econf, wv):
     '''
     prep = get_preprocessing(econf)
     if prep is None:
-        return wv.index2word, wv.syn0
+        return wv.vocab
 
     vocab = {}
     for word, entry in wv.vocab.items():
         modified = prep(word)
         if modified not in vocab or vocab[modified].count < entry.count:
             vocab[modified] = entry
-    indices = [e.index for e in vocab.values()]
-    return vocab.keys(), wv.syn0[indices]
+    return vocab
 
 
 def get_preprocessing(econf):
