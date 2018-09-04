@@ -72,7 +72,7 @@ def _load(fn):
 def _create_model(conf, sampler):
     inp_mentions, sem_mentions = _semantic_repr(conf, sampler, 'sample_size')
     inp_context, sem_context = _semantic_repr(conf, sampler, 'context_size')
-    inp_scores = Input(shape=(sampler.cand_gen.scores,))
+    inp_scores = Input(shape=(len(conf.candidates.generator.split('\n')),))
     inp_overlap = Input(shape=(1,))  # token overlap between q and a
 
     v_sem = PairwiseSimilarity()(sem_mentions)
