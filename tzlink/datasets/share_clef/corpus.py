@@ -53,7 +53,7 @@ def _parse_report(rep_fn, anno_fn):
 def _join_standoff(anno, report):
     meta, report = report.split('\n', 1)
     docid = _get_docid(meta)
-    mentions = list(_parse_anno(anno, report, len(meta)))
+    mentions = list(_parse_anno(anno, report, len(meta)+1))
     body = {
         'text': report,
         'offset': 0,
