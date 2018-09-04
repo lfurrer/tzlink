@@ -226,6 +226,10 @@ class Evaluator:
             # No candidates.
             return self.conf.general.nil_symbol
 
+        if not top_ids:
+            # Best-ranked candidate name has no match in the dictionary.
+            return self.conf.general.nil_symbol
+
         if score < self.conf.rank.min_score:
             # Score too low.
             return self.conf.general.nil_symbol
