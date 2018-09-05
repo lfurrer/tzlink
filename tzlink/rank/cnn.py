@@ -36,24 +36,25 @@ def run(conf, train=True, dumpfn=None, **evalparams):
     logging.info('preprocessing validation data...')
     val_data = sampler.prediction_samples()
     if train:
-        _train(conf, sampler, val_data, dumpfn)
-    logging.info('load best model...')
-    model = _load(dumpfn)
-    logging.info('predict scores for validation data...')
-    val_data.scores = model.predict(val_data.x,
-                                    batch_size=conf.rank.batch_size)
-    logging.info('evaluate and/or serialize...')
-    handle_predictions(conf, val_data, **evalparams)
+        _train(conf, sampler, val_data, dumpfn, evalparams)
+    else:
+        logging.info('load pretrained model...')
+        model = _load(dumpfn)
+        logging.info('predict scores for validation data...')
+        val_data.scores = model.predict(val_data.x,
+                                        batch_size=conf.rank.batch_size)
+        logging.info('evaluate and/or serialize...')
+        handle_predictions(conf, val_data, **evalparams)
     logging.info('done.')
 
 
-def _train(conf, sampler, val_data, dumpfn):
+def _train(conf, sampler, val_data, dumpfn, evalparams):
     logging.info('compiling model architecture...')
     model = _create_model(conf, sampler)
     logging.info('preprocessing training data...')
     tr_data = sampler.training_samples()
     logging.info('training CNN...')
-    earlystopping = EarlyStoppingRankingAccuracy(conf, val_data, dumpfn)
+    earlystopping = EarlyStoppingRankingAccuracy(conf, val_data, dumpfn, evalparams)
     model.fit(tr_data.x, tr_data.y, sample_weight=tr_data.weights,
               validation_data=(val_data.x, val_data.y, val_data.weights),
               callbacks=[earlystopping],
