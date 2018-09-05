@@ -51,6 +51,7 @@ class SummaryWriter:
 
     def update(self, mention, refs, occs, _y, _r, decision):
         '''Update with outcome information per occurrence.'''
+        mention = _rm_tabs_nl(mention)
         for occ in occs:
             entry = (*occ, mention, refs, *decision)
             self._entries.append(entry)
@@ -77,7 +78,7 @@ class DetailedWriter:
     def update(self, mention, refs, occs, _, ranking, outcome):
         '''Update with a distinct mention.'''
         category, pred = self._outcome(outcome)
-        entry = (str(refs), mention, occs, pred, ranking)
+        entry = (str(refs), _rm_tabs_nl(mention), occs, pred, ranking)
         self._entries[category].append(entry)
 
     def dump(self):
@@ -152,6 +153,10 @@ class TRECWriter:
                 writer = csv.writer(f, quotechar=None,
                                     delimiter='\t', lineterminator='\n')
                 writer.writerows(self._entries[category])
+
+
+def _rm_tabs_nl(text):
+    return text.replace('\t', ' ').replace('\n', ' ')
 
 
 # Map command-line args to Writer instances.
