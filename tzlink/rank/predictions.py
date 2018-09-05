@@ -16,25 +16,16 @@ from collections import Counter
 from ..util.util import smart_open
 
 
-def handle_predictions(conf, data, evaluate=(sys.stdout,),
-                       predict=False, detailed=False, trec_eval=False):
+def handle_predictions(conf, data, summary=(sys.stdout,), predict=()):
     '''
-    Write predictions to TSV files and/or print evaluation figures.
+    Write predictions to TSV files and/or print evaluation summaries.
     '''
-    evaluator = Evaluator(conf)
-    if predict:
-        evaluator.writers.append(SummaryWriter(conf))
-    if detailed:
-        evaluator.writers.append(DetailedWriter(conf))
-    if trec_eval:
-        evaluator.writers.append(TRECWriter(conf))
-
+    evaluator = Evaluator(conf, predict)
     evaluator.evaluate(data)
 
-    for file in evaluate:
+    for file in summary:
         evaluator.summary(file)
-    for writer in evaluator.writers:
-        writer.dump()
+    evaluator.dump_predictions()
 
 
 class SummaryWriter:
@@ -163,13 +154,21 @@ class TRECWriter:
                 writer.writerows(self._entries[category])
 
 
+# Map command-line args to Writer instances.
+_writer_names = {
+    'summary': SummaryWriter,
+    'rich': DetailedWriter,
+    'trec': TRECWriter,
+}
+
+
 class Evaluator:
     '''
     Count a selection of outcomes and compute accuracy.
     '''
     def __init__(self, conf, writers=()):
         self.conf = conf
-        self.writers = list(writers)
+        self.writers = [_writer_names[w](conf) for w in writers]
 
         self.correct = 0
         self.total = 0
@@ -183,11 +182,11 @@ class Evaluator:
         return self.correct/self.total
 
     @classmethod
-    def from_data(cls, conf, data):
+    def from_data(cls, conf, data, writers=()):
         '''
         Create an already populated Evaluator instance.
         '''
-        evaluator = cls(conf)
+        evaluator = cls(conf, writers)
         evaluator.evaluate(data)
         return evaluator
 
@@ -266,3 +265,8 @@ class Evaluator:
         labels = 'accuracy correct total unreachable nocandidates ambiguous'
         for label in labels.split():
             outfile.write('{:12} {:5}\n'.format(label, getattr(self, label)))
+
+    def dump_predictions(self):
+        '''Write all accumulated predictions to disk.'''
+        for writer in self.writers:
+            writer.dump()

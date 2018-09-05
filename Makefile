@@ -8,7 +8,7 @@ optional: bpe embeddings-chiu
 
 # Run target: train a model and evaluate it.
 run:
-	python3 -m tzlink.rank -t -p -r
+	python3 -m tzlink.rank -t -r
 
 
 # Intermediate targets: specific paths.
