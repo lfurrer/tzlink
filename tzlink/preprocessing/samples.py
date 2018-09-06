@@ -180,7 +180,7 @@ class Sampler:
         _add(self.conf.candidates.generator)
         _add(self.conf.rank.embeddings)
 
-        ignored = {'rootpath', 'timestamp', 'workers'}
+        ignored = {'rootpath', 'timestamp', 'workers', 'startup_scripts'}
         for section in sorted(self.conf):
             if section.startswith('emb') or section == self.conf.general.dataset:
                 for name in sorted(self.conf[section]):

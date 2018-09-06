@@ -13,6 +13,7 @@ import sys
 
 from ..util.util import get_config
 from ..util.record import Recorder
+from ..util import startup
 
 
 def run(config, record=False, **kwargs):
@@ -21,6 +22,7 @@ def run(config, record=False, **kwargs):
     '''
     conf = get_config(config)
     recorder = Recorder(conf)
+    startup.run_scripts(conf)
 
     from . import cnn
     cnn.run(conf, summary=[sys.stdout, recorder.results], **kwargs)
