@@ -353,12 +353,13 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         except TypeError:
             # Newer versions of gensim require a constructor argument.
             vectors = KeyedVectors(self._wv.shape[1])
+        phrases = []
         for name in self.terminology.iter_names():
             # This iterates over unique names.
             vectors.vocab[name] = Vocab(index=len(vectors.vocab), count=None)
             vectors.index2word.append(name)
-            vectors.syn0.append(self._phrase_vector(name))
-        vectors.syn0 = vectors.syn0norm = np.array(vectors.syn0)
+            phrases.append(self._phrase_vector(name))
+        vectors.syn0 = vectors.syn0norm = np.array(phrases)
         return vectors
 
     def _phrase_vector(self, phrase):
