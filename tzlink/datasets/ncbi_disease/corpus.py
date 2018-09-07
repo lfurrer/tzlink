@@ -9,20 +9,28 @@ Convert the NCBI-disease corpus to our document-interchange format.
 
 import itertools as it
 
+from . import subsets
 
-def parse_NCBI_disease_corpus(filename, terminology):
+
+def parse_NCBI_disease_corpus(dir_, subset, terminology):
     '''
-    Parse one file of the corpus.
+    Parse a subset of the corpus.
 
     @Args:
-        filenames: "NCBItrainset_corpus.txt", "NCBIdevelopset_corpus.txt",
-                   or "NCBItestset_corpus.txt"
+        dir_: path to a directory containing the corpus, ie.
+              the files "NCBItrainset_corpus.txt",
+              "NCBIdevelopset_corpus.txt", and
+              "NCBItestset_corpus.txt"
+        subset: "test", "dev", "dev1" ...
+        terminology: a tzlink.datasets.Terminology instance
+
     @Returns:
         iter(dict(...)): iterator over documents (nested dicts/lists)
     '''
-    with open(filename, "r", encoding='ascii') as file:
-        for doc in _split_documents(file):
-            yield _parse_document(doc, terminology)
+    for filename, selector in subsets.prepare(dir_, subset):
+        with open(filename, "r", encoding='ascii') as file:
+            for doc in selector(_split_documents(file)):
+                yield _parse_document(doc, terminology)
 
 
 def _split_documents(file):

@@ -8,51 +8,51 @@ Convert the ShARe/CLEF corpus to our document-interchange format.
 
 
 import os
-import itertools as it
+
+from . import subsets
 
 
-def parse_ShARe_CLEF_corpus(dir_, terminology=None):
+def parse_ShARe_CLEF_corpus(dir_, subset, terminology=None):
     '''
-    Parse a portion of the corpus.
+    Parse a subset of the corpus.
 
     @Args:
         dir_: path to a directory containing the corpus
               The following directory structure is required:
               dir_/
-                  reports/
-                      report-1.txt
-                      report-2.txt
-                      ...
-                  annotations/
-                      report-1.pipe.txt
-                      report-2.pipe.txt
-                      ...
+                  train/
+                      reports/
+                          report-1.txt
+                          report-2.txt
+                          ...
+                      annotations/
+                          report-1.pipe.txt
+                          report-2.pipe.txt
+                          ...
+                  test/
+                      [same substructure]
+        subset: "test", "dev", "dev1" ...
+        terminology: ignored
 
     @Returns:
         iter(dict(...)): iterator over documents (nested dicts/lists)
     '''
     del terminology  # unused compatibility argument
 
-    subdirs = [os.path.join(dir_, s) for s in ('reports', 'annotations')]
-    fns = (sorted(os.listdir(s)) for s in subdirs)
+    subdir, ids = subsets.docs(subset)
+    rep_tmpl = os.path.join(dir_, subdir, 'reports', '{}.txt')
+    ann_tmpl = os.path.join(dir_, subdir, 'annotations', '{}.pipe.txt')
 
-    for rep, anno in it.zip_longest(*fns):
-        # Take some precautions to make sure the files are zipped correctly.
-        assert rep.split('.')[0] == anno.split('.')[0], 'filename mismatch'
-        paths = (os.path.join(*c) for c in zip(subdirs, (rep, anno)))
-        yield _parse_report(*paths)
-
-
-def _parse_report(rep_fn, anno_fn):
-    with open(rep_fn, "r", encoding='ascii') as f:
-        rep = f.read()
-    with open(anno_fn, "r", encoding='ascii') as f:
-        return _join_standoff(f, rep)
+    for docid in ids:
+        with open(rep_tmpl.format(docid), "r", encoding='ascii') as f:
+            report = f.read()
+        with open(ann_tmpl.format(docid), "r", encoding='ascii') as f:
+            yield _join_standoff(f, report, docid)
 
 
-def _join_standoff(anno, report):
+def _join_standoff(anno, report, docid):
     meta, report = report.split('\n', 1)
-    docid = _get_docid(meta)
+    assert docid == _get_docid(meta), 'metadata/filename mismatch'
     mentions = list(_parse_anno(anno, report, len(meta)+1))
     body = {
         'text': report,
@@ -83,7 +83,7 @@ def _get_docid(report):
     id2, id1, _, type_, _ = report.split('||||', 4)
     return _docid_template.format(int(id1), int(id2), type_.strip())
 
-_docid_template = '{:05d}-{:06d}-{}.txt'
+_docid_template = '{:05d}-{:06d}-{}'
 
 
 def pairs(sequence):

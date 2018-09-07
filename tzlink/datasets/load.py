@@ -24,28 +24,28 @@ dict_loader = {
     'share-clef': parse_SNOMED_terminology,
 }
 
+
 def load_data(conf, subset, terminology=None):
     '''
-    Pick and parse the right corpus or dict file.
+    Pick and parse the right corpus file.
 
     The parameter subset is one of "train", "dev", "test",
-    and "dict".
+    or "devN"/"trainN" with an integer indicating the fold.
     '''
     dataset = conf.general.dataset
-    fn = conf[dataset]['{}_fn'.format(subset)]
-    if subset == 'dict':
-        return dict_loader[dataset](fn)
-    else:
-        if terminology is None:
-            terminology = load_dict(conf)
-        return corpus_loader[dataset](fn, terminology)
+    dir_ = conf[dataset].corpus_dir
+    if terminology is None:
+        terminology = load_dict(conf)
+    return corpus_loader[dataset](dir_, subset, terminology)
 
 
 def load_dict(conf):
     '''
     Read a dict file into a Terminology instance.
     '''
-    return Terminology(load_data(conf, 'dict'))
+    dataset = conf.general.dataset
+    fn = conf[dataset].dict_fn
+    return Terminology(dict_loader[dataset](fn))
 
 
 def itermentions(corpus):
