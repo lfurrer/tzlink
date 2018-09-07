@@ -107,6 +107,7 @@ class Sampler:
         '''
         Create vectorized samples with labels for training or prediction.
         '''
+        logging.info('preprocessing dataset "%s"', subset)
         if not self.conf.general.dataset_cache:
             return self._samples(subset, oracle)
 

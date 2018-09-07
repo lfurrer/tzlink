@@ -30,8 +30,8 @@ def main():
         '-r', '--record', action='store_true',
         help='create a summary with results and config info')
     ap.add_argument(
-        '-m', '--model', metavar='PATH', dest='dumpfn',
-        help='path for dumping and loading a trained model')
+        '-m', '--model', metavar='PATH', nargs='+', default=(), dest='dumpfns',
+        help='path(s) for dumping and loading trained models')
     ap.add_argument(
         '-c', '--config', metavar='PATH', nargs='+', default=(),
         help='config file(s) for overriding the defaults')
