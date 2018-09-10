@@ -85,8 +85,11 @@ def _load(fn):
 
 
 def _create_model(conf, sampler):
-    inp_mentions, sem_mentions = _semantic_repr(conf, sampler, 'sample_size')
-    inp_context, sem_context = _semantic_repr(conf, sampler, 'context_size')
+    # Embedding layers are shared among all inputs.
+    emb = [_embedding_layer(conf[emb], sampler.emb[emb].emb_matrix)
+           for emb in conf.rank.embeddings]
+    inp_mentions, sem_mentions = _semantic_repr_qa(conf, emb, 'sample_size')
+    inp_context, sem_context = _semantic_repr_qa(conf, emb, 'context_size')
     inp_scores = Input(shape=(len(conf.candidates.generator.split('\n')),))
     inp_overlap = Input(shape=(1,))  # token overlap between q and a
 
@@ -103,15 +106,14 @@ def _create_model(conf, sampler):
     return model
 
 
-def _semantic_repr(conf, sampler, size):
-    # Embedding layers are shared between Q and A, but not between mentions
-    # and context, because the text size differs.
-    emb = list(_embedding_info(conf, sampler, size))
-    if not emb:
+def _semantic_repr_qa(conf, emb_layers, size_name):
+    sizes = [conf[emb][size_name] for emb in conf.rank.embeddings]
+    emb_info = [(s, e) for s, e in zip(sizes, emb_layers) if s]
+    if not emb_info:  # sample/context size is 0 -> omit entirely
         return [], []
-    nodes = (_semantic_layers(conf, emb) for _ in range(2))
-    (inp_q, inp_a), sem = zip(*nodes)
-    return inp_q + inp_a, list(sem)  # zip returns tuples
+    nodes = (_semantic_layers(conf, emb_info) for _ in range(2))
+    (inp_q, inp_a), (sem_q, sem_a) = zip(*nodes)
+    return inp_q + inp_a, [sem_q, sem_a]
 
 
 def _semantic_layers(conf, emb_info):
@@ -128,16 +130,6 @@ def _word_layer(emb_info):
         emb.append(emb_layer(i))
     emb = _conditional_concat(emb)
     return inp, emb
-
-
-def _embedding_info(conf, sampler, size_name):
-    for emb in conf.rank.embeddings:
-        size = conf[emb][size_name]
-        if not size:  # sample/context size is 0 -> omit entirely
-            continue
-        matrix = sampler.emb[emb].emb_matrix
-        emb_layer = _embedding_layer(conf[emb], matrix, input_length=size)
-        yield size, emb_layer
 
 
 def _embedding_layer(econf, matrix=None, **kwargs):
