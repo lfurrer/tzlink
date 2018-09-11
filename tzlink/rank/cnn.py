@@ -10,37 +10,17 @@ Convolutional Neural Network for ranking mention-candidate pairs.
 
 
 import logging
-import tempfile
 
-import numpy as np
-from keras.models import Model, load_model
+from keras.models import Model
 from keras.layers import Input, Dense, Concatenate, Layer
 from keras.layers import Conv1D, GlobalMaxPooling1D, Embedding
 from keras import backend as K
 
 from ..preprocessing import samples
-from .predictions import handle_predictions
 from .callback import EarlyStoppingRankingAccuracy
 
 
-def run(conf, train=True, dumpfns=(), **evalparams):
-    '''
-    Run the CNN (incl. preprocessing).
-    '''
-    if train:
-        if not dumpfns:
-            with tempfile.NamedTemporaryFile(delete=False) as f:
-                dumpfns = [f.name]
-        elif len(dumpfns) > 1:
-            raise ValueError('cannot save model to multiple files')
-        _run_train(conf, dumpfns[0], **evalparams)
-    else:
-        if not dumpfns:
-            raise ValueError('no model to train or load')
-        _run_predict(conf, dumpfns, **evalparams)
-
-
-def _run_train(conf, dumpfn, **evalparams):
+def run_training(conf, dumpfn, **evalparams):
     '''
     Train a model and evaluate/predict.
     '''
@@ -57,31 +37,6 @@ def _run_train(conf, dumpfn, **evalparams):
               epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
     logging.info('done.')
-
-
-def _run_predict(conf, dumpfns, **evalparams):
-    '''
-    Load a model for evaluation/predictions.
-    '''
-    val_data = samples.Sampler(conf).prediction_samples()
-    scores = []
-    for fn in dumpfns:
-        logging.info('load pretrained model from %s...', fn)
-        model = _load(fn)
-        logging.info('predict scores for validation data...')
-        scores.append(model.predict(val_data.x,
-                                    batch_size=conf.rank.batch_size))
-    val_data.scores = np.mean(scores, axis=0)
-    logging.info('evaluate and/or serialize...')
-    handle_predictions(conf, val_data, **evalparams)
-    logging.info('done.')
-
-
-def _load(fn):
-    model = load_model(fn, custom_objects={
-        'PairwiseSimilarity': PairwiseSimilarity,
-    })
-    return model
 
 
 def _create_model(conf, sampler):

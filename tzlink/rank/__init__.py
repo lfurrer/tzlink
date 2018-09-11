@@ -24,7 +24,7 @@ def run(config, record=False, **kwargs):
     recorder = Recorder(conf)
     startup.run_scripts(conf)
 
-    from . import cnn
-    cnn.run(conf, summary=[sys.stdout, recorder.results], **kwargs)
+    from . import launch
+    launch.run(conf, summary=[sys.stdout, recorder.results], **kwargs)
     if record:
         recorder.dump()
