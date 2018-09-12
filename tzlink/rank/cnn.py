@@ -32,7 +32,6 @@ def run_training(conf, dumpfn, **evalparams):
     logging.info('training CNN...')
     earlystopping = EarlyStoppingRankingAccuracy(conf, val_data, dumpfn, evalparams)
     model.fit(tr_data.x, tr_data.y, sample_weight=tr_data.weights,
-              validation_data=(val_data.x, val_data.y, val_data.weights),
               callbacks=[earlystopping],
               epochs=conf.rank.epochs,
               batch_size=conf.rank.batch_size)
