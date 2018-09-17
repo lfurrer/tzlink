@@ -9,5 +9,5 @@ Terminology and corpus for the NCBI Disease dataset.
 '''
 
 
-from .term import parse_MEDIC_terminology
+from .term import parse_MEDIC_terminology, extend_MEDIC_with_UMLS
 from .corpus import parse_NCBI_disease_corpus
