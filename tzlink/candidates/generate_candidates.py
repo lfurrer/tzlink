@@ -173,6 +173,10 @@ class _MultiGenerator(_BaseCandidateGenerator):
         for g in self.generators:
             g.terminology_update(ref_ids)
 
+    def precompute(self, mentions):
+        for g in self.generators:
+            g.precompute(mentions)
+
     def candidates(self, mention):
         return set().union(*(g.candidates(mention) for g in self.generators))
 
