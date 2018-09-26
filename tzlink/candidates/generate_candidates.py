@@ -612,11 +612,12 @@ class CompositeCandidates(_NonRankedCandidates):
     These two actions are independent of one another.
     '''
 
-    def __init__(self, shared):
+    def __init__(self, shared, combinationlimit=1000):
         super().__init__(shared)
         self._name_index = self._index_names()
         self._seen = set()
         self._trigger = re.compile(r'\b(?:and/or|and|or|/)\b')
+        self._comb_limit = max(1, combinationlimit)
 
     def _index_names(self):
         index = {}
@@ -647,10 +648,59 @@ class CompositeCandidates(_NonRankedCandidates):
                 entry = DictEntry(names[0], id_, (), '', names[1:])
                 self.terminology.add(entry)
 
-    @staticmethod
-    def _compose(comp_names):
+    def _compose(self, comp_names):
+        comp_names = self._limit_combinations(comp_names)
         for combination in it.product(*comp_names):
             yield ' and '.join(combination)
+
+    def _limit_combinations(self, comp_names):
+        '''
+        Prevent combinatoric explosion when composing names.
+
+        Heuristically remove unnecessary names until the length
+        product is below the combination limit.
+        '''
+        if self._below_limit(comp_names):
+            return comp_names
+        comp_names = [set(c) for c in comp_names]  # copy to avoid side effect
+        filters = (self._find_case_dups, self._find_parens, self._find_commas)
+        filters = it.chain(filters, it.repeat(self._find_longest_half))
+        for filter_ in filters:
+            for comp in comp_names:
+                comp.difference_update(filter_(comp))
+                if self._below_limit(comp_names):
+                    return comp_names
+
+    def _below_limit(self, comp_names):
+        p = 1
+        for comp in comp_names:
+            p *= len(comp)
+            if p > self._comb_limit:
+                return False
+        return True
+
+    @staticmethod
+    def _find_case_dups(names):
+        '''Find case-related duplicates.'''
+        unique = {n.lower(): n for n in names}
+        return names.difference(unique.values())
+
+    @staticmethod
+    def _find_parens(names):
+        '''Find names with parentheses or brackets.'''
+        return [n for n in names if re.search(r'[()\[\]{}]', n)]
+
+    @staticmethod
+    def _find_commas(names):
+        '''Find names with commas.'''
+        return [n for n in names if ',' in n]
+
+    @staticmethod
+    def _find_longest_half(names):
+        '''Find the longer half of the names.'''
+        bylength = sorted(names, key=len)
+        cutoff = len(names) // 2
+        return bylength[cutoff:]
 
     def _candidates(self, mention):
         for unfolding in self._unfold(mention):
