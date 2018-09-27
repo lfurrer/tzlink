@@ -9,20 +9,12 @@ Import terminology from SNOMED and other sources through UMLS Metathesaurus.
 '''
 
 
-import os
 import csv
-from enum import IntEnum
 
 from ..terminology import DictEntry
-from ...util.util import smart_open, co_init
+from ...util.util import smart_open
+from ...util.umls import read_RRF, iterconcepts, co_rows, C, D, S
 
-
-# Column names of the UMLS MRCONSO, MRDEF and MRSTY tables.
-# https://www.ncbi.nlm.nih.gov/books/NBK9685/
-C = IntEnum('MRCONSO', 'CUI LAT TS LUI STT SUI ISPREF AUI SAUI SCUI SDUI '
-                       'SAB TTY CODE STR SRL SUPPRESS CVF', start=0)
-D = IntEnum('MRDEF', 'CUI AUI ATUI SATUI SAB DEF SUPPRESS CVF', start=0)
-S = IntEnum('MRSTY', 'CUI TUI STN STY ATUI CVF', start=0)
 
 # IDs of the targeted semantic types.
 SEMTYPES = frozenset((
@@ -51,10 +43,10 @@ def preprocess_SNOMED_terminology(metadir, target):
 
 def _preprocess_SNOMED_terminology(metadir):
     conso_reader, def_reader, sty_reader = (
-        _read_RRF(metadir, n) for n in ('CONSO', 'DEF', 'STY'))
-    concepts = _iterconcepts(conso_reader)
-    definitions = _co_rows(def_reader)
-    semtypes = _co_rows(sty_reader)
+        read_RRF(metadir, n) for n in ('CONSO', 'DEF', 'STY'))
+    concepts = iterconcepts(conso_reader)
+    definitions = co_rows(def_reader)
+    semtypes = co_rows(sty_reader)
 
     for conc in concepts:
         cui = conc[0][C.CUI]
@@ -67,71 +59,6 @@ def _preprocess_SNOMED_terminology(metadir):
         for def_, synonyms in _group_by_definition(conc, defs):
             def_ = def_.replace('\t', ' ')
             yield (cui, def_, *synonyms)
-
-
-def _read_RRF(metadir, name):
-    fn = os.path.join(metadir, 'MR{}.RRF'.format(name))
-    with open(fn, encoding='utf-8') as f:
-        yield from csv.reader(f, delimiter='|', quotechar=None)
-
-
-def _iterconcepts(reader):
-    cui = None
-    accu = []
-    for row in reader:
-        if _skip_row(row):
-            continue
-        if row[C.CUI] != cui:
-            if accu:
-                yield accu
-            cui = row[C.CUI]
-            accu.clear()
-        accu.append(row)
-    if accu:
-        yield accu
-
-
-def _skip_row(row):
-    '''Exclude lines for a number of reasons.'''
-    if row[C.LAT] != 'ENG':
-        return True
-    if row[C.SUPPRESS] != 'N':
-        return True
-    return False
-
-
-@co_init
-def _co_rows(reader):
-    '''
-    Coroutine iterating over selected rows.
-
-    For each CUI provided through .send(), yield a list of
-    matching rows (which may be empty).
-
-    Every CUI should always be greater (alphabetically
-    later) than any previously provided CUI, otherwise
-    nothing will be found.
-
-    This generator never raises StopIteration. When the
-    underlying iterator is exhausted, the generator will
-    continue to yield empty lists for each sent item.
-    '''
-    target = (yield None)
-    accu = []
-    for row in reader:
-        current = row[0]  # the CUI is in the first field in all tables
-        while current > target:
-            # Wait for target to catch up.
-            target = (yield accu)
-            accu.clear()
-        if current == target:
-            # Accumulate rows as long as their CUI matches the target CUI.
-            accu.append(row)
-    # The reader is exhausted. Yield the last batch of accumulated rows,
-    # then continue yielding empty lists.
-    while True:
-        yield accu
-        accu.clear()
 
 
 def _group_by_definition(conc, defs):

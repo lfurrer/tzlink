@@ -12,8 +12,8 @@ Parse the MEDIC terminology used for the NCBI disease corpus.
 import csv
 
 from ..terminology import DictEntry
-from ..share_clef.term import _read_RRF, _iterconcepts, C
 from ...util.util import smart_open
+from ...util.umls import read_RRF, iterconcepts, C
 
 
 def parse_MEDIC_terminology(source):
@@ -74,7 +74,7 @@ def extend_MEDIC_with_UMLS(medic, metadir, target):
 
 
 def _extend_MEDIC_with_UMLS(medic, metadir, target):
-    concepts = _iterconcepts(_read_RRF(metadir, 'CONSO'))
+    concepts = iterconcepts(read_RRF(metadir, 'CONSO'))
     with MedicBuffer(medic, target) as mbuf:
         for conc in concepts:
             ids = list(_medic_ids(conc))
@@ -97,6 +97,9 @@ _prefixes = {'MSH': 'MESH:', 'OMIM': 'OMIM:'}
 
 
 class MedicBuffer:
+    '''
+    Keep the MEDIC vocabulary in memory while adding synonyms.
+    '''
     def __init__(self, infile, outfile):
         self._index = {}
         self._lines = []
@@ -128,12 +131,18 @@ class MedicBuffer:
         return False
 
     def update(self, ids, newnames):
+        '''
+        Add new synonyms to all rows that match the IDs.
+        '''
         for i in ids:
             for names in self._index.get(i, ()):
                 for n in newnames:
                     names.setdefault(n.lower(), n)
 
     def close(self):
+        '''
+        Write the modified file to disk.
+        '''
         for line, names in self._lines:
             newnames = [n for n in names.values() if n is not None]
             self._outfile.write(line)
