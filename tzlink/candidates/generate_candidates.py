@@ -434,15 +434,15 @@ class SymbolReplacementCandidates(_NonRankedCandidates):
     '''
 
     numerals = {
-        '1': ('one', 'single'),
-        '2': ('two', 'double', 'ii'),
-        '3': ('three', 'triple'),
-        '4': ('four', 'quadruple'),
-        '5': ('five',),
-        '6': ('six',),
-        '7': ('seven',),
-        '8': ('eight',),
-        '9': ('nine',),
+        '1': ('one', 'single', 'first'),
+        '2': ('two', 'double', 'ii', 'second'),
+        '3': ('three', 'triple', 'third'),
+        '4': ('four', 'quadruple', 'fourth'),
+        '5': ('five', 'fifth'),
+        '6': ('six', 'sixth'),
+        '7': ('seven', 'seventh'),
+        '8': ('eight', 'eighth'),
+        '9': ('nine', 'ninth'),
     }
 
     other_symbols = {
