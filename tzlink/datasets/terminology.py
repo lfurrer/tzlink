@@ -20,10 +20,12 @@ class Terminology:
     '''
     Terminology indexed by names and IDs.
     '''
-    def __init__(self, dict_entries):
+    def __init__(self, dict_entries, remove_ambiguous=False):
         self._by_name = {}
         self._by_id = {}
         self._index(dict_entries)
+        if remove_ambiguous:
+            self.remove_ambiguous()
 
     def _index(self, entries):
         for entry in entries:
@@ -40,6 +42,53 @@ class Terminology:
     def _add(index, entry, main, secondary):
         for elem in (main, *secondary):
             index.setdefault(elem, []).append(entry)
+
+    def remove_ambiguous(self):
+        '''
+        Remove ambiguous names from the terminology.
+        '''
+        for name, entries in self._by_name.items():
+            if len(entries) > 1:
+                # There might be multiple entries with the same ID --
+                # that doesn't count as ambiguity.
+                d = {}
+                for e in entries:
+                    d.setdefault(e.id, []).append(e)
+                if len(d) > 1:
+                    self._remove_ambiguous(d.values(), name)
+
+    def _remove_ambiguous(self, entries, name):
+        # Determine which of the (lists of) entries has the fewest names,
+        # and remove the name from all the others.
+        def _count_names(es):
+            return sum(len(e.syn)+1 for e in es)
+        for subgroup in sorted(entries, key=_count_names)[1:]:
+            for entry in subgroup:
+                self._remove_name_entry(entry, name)
+
+    def _remove_name_entry(self, entry, name):
+        try:
+            self._by_name[name].remove(entry)
+        except ValueError:
+            pass
+
+        newentry = entry._replace(syn=tuple(n for n in entry.syn if n != name))
+        if newentry.name == name:
+            try:
+                newentry = newentry._replace(name=newentry.syn[0],
+                                             syn=newentry.syn[1:])
+            except IndexError:
+                # No synonyms left. Delete the entry altogether.
+                newentry = None
+        for id_ in (entry.id, *entry.alt):
+            entries = self._by_id[id_]
+            try:
+                entries.remove(entry)
+            except ValueError:
+                # It has already gone.
+                continue
+            if newentry is not None:
+                entries.append(newentry)
 
     def has_id(self, id_):
         '''

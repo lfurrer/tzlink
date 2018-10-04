@@ -45,7 +45,8 @@ def load_dict(conf):
     '''
     dataset = conf.general.dataset
     fn = conf[dataset].dict_fn
-    return Terminology(dict_loader[dataset](fn))
+    amb = conf.candidates.suppress_ambiguous
+    return Terminology(dict_loader[dataset](fn), amb)
 
 
 def itermentions(corpus):

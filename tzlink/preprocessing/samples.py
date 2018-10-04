@@ -179,6 +179,7 @@ class Sampler:
         _add(subset)
         _add(oracle)
         _add(self.conf.candidates.generator)
+        _add(self.conf.candidates.suppress_ambiguous)
         _add(self.conf.rank.embeddings)
 
         ignored = {'rootpath', 'timestamp', 'workers', 'startup_scripts'}

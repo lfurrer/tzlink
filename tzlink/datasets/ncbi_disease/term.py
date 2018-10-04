@@ -10,7 +10,6 @@ Parse the MEDIC terminology used for the NCBI disease corpus.
 
 
 import csv
-from collections import defaultdict
 
 from ..terminology import DictEntry
 from ...util.util import smart_open
@@ -103,7 +102,6 @@ class MedicBuffer:
     '''
     def __init__(self, infile, outfile):
         self._index = {}
-        self._ambiguous = defaultdict(set)
         self._lines = []
         self._outfile = outfile
         self._read(infile)
@@ -140,20 +138,15 @@ class MedicBuffer:
             for names in self._index.get(i, ()):
                 for n in newnames:
                     names.setdefault(n.lower(), n)
-                    self._ambiguous[n].add(i)
 
     def close(self):
         '''
         Write the modified file to disk.
         '''
         for line, names in self._lines:
-            newnames = [n for n in names.values()
-                        if n is not None and not self._is_ambiguous(n)]
+            newnames = [n for n in names.values() if n is not None]
             self._outfile.write(line)
             if newnames:
                 self._outfile.write('|')
                 self._outfile.write('|'.join(newnames))
             self._outfile.write('\n')
-
-    def _is_ambiguous(self, name):
-        return len(self._ambiguous[name]) > 1
