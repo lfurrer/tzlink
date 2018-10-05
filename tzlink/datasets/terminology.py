@@ -47,31 +47,26 @@ class Terminology:
         '''
         Remove ambiguous names from the terminology.
         '''
+        delenda = []
         for name, entries in self._by_name.items():
             if len(entries) > 1:
                 # There might be multiple entries with the same ID --
                 # that doesn't count as ambiguity.
-                d = {}
-                for e in entries:
-                    d.setdefault(e.id, []).append(e)
-                if len(d) > 1:
-                    self._remove_ambiguous(d.values(), name)
+                if len(set(e.id for e in entries)) > 1:
+                    # Don't delete right away --
+                    # dict size shouldn't change during iteration.
+                    delenda.append(name)
+        for name in delenda:
+            self._remove_ambiguous(name)
 
-    def _remove_ambiguous(self, entries, name):
-        # Determine which of the (lists of) entries has the fewest names,
-        # and remove the name from all the others.
-        def _count_names(es):
-            return sum(len(e.syn)+1 for e in es)
-        for subgroup in sorted(entries, key=_count_names)[1:]:
-            for entry in subgroup:
-                self._remove_name_entry(entry, name)
+    def _remove_ambiguous(self, name):
+        # Remove from self._by_name.
+        entries = self._by_name.pop(name)
+        # Remove from self._by_id.
+        for entry in entries:
+            self._remove_name_entry(entry, name)
 
     def _remove_name_entry(self, entry, name):
-        try:
-            self._by_name[name].remove(entry)
-        except ValueError:
-            pass
-
         newentry = entry._replace(syn=tuple(n for n in entry.syn if n != name))
         if newentry.name == name:
             try:
@@ -89,6 +84,13 @@ class Terminology:
                 continue
             if newentry is not None:
                 entries.append(newentry)
+            elif not entries:
+                # If deleting this name means that this ID has no more names
+                # associated with it, then the name is undeleted for this ID.
+                # Re-insert the original entry here and in the name index.
+                entries.append(entry)
+                if entry not in self._by_name.setdefault(name, []):
+                    self._by_name[name].append(entry)
 
     def has_id(self, id_):
         '''
