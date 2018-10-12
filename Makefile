@@ -38,7 +38,8 @@ data/ncbi-disease/%.txt: | data/ncbi-disease
 	wget -O - https://www.ncbi.nlm.nih.gov/CBBresearch/Dogan/DISEASE/$(subst .txt,.zip,$(@F)) | funzip > $@
 
 data/ncbi-disease/CTD_diseases.tsv: | data/ncbi-disease
-	wget -O - https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/tmTools/download/DNorm/DNorm-0.0.7.tgz | tar -xzOf - DNorm-0.0.7/data/$(@F) > $@
+	@# sed filter fixes a few typos in the MEDIC file (trailing commas, missing pipes).
+	wget -O - https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/tmTools/download/DNorm/DNorm-0.0.7.tgz | tar -xzOf - DNorm-0.0.7/data/$(@F) | sed 's/,|/|/g;s/;ALS10 /|ALS10|/' > $@
 
 # Optional leaf targets.
 data/embeddings/bpe%: | data/embeddings

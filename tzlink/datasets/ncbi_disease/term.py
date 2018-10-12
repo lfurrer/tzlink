@@ -10,6 +10,7 @@ Parse the MEDIC terminology used for the NCBI disease corpus.
 
 
 import csv
+from collections import OrderedDict
 
 from ..terminology import DictEntry
 from ...util.util import smart_open
@@ -77,15 +78,15 @@ def _pack_list_value_fields(row):
         row[i] = '|'.join(row[i])
 
 
-def extend_MEDIC_with_UMLS(medic, metadir, target):
+def extend_MEDIC_with_UMLS(medic, metadir, target, **flags):
     '''
     Create an extended version of the MEDIC terminology TSV.
     '''
     with smart_open(medic) as r, smart_open(target, 'w') as w:
-        _extend_MEDIC_with_UMLS(r, metadir, w)
+        _extend_MEDIC_with_UMLS(r, metadir, w, **flags)
 
 
-def _extend_MEDIC_with_UMLS(medic, metadir, target):
+def _extend_MEDIC_with_UMLS(medic, metadir, target, **flags):
     lines = list(_parse_MEDIC_format(medic, skip_comments=False))
     writer = csv.writer(target, delimiter='\t', quotechar=None)
 
@@ -93,7 +94,7 @@ def _extend_MEDIC_with_UMLS(medic, metadir, target):
     while lines[0][0].startswith('#'):
         writer.writerow(lines.pop(0))
     # Apply all modifications in-place.
-    _add_UMLS_names(lines, metadir)
+    _apply_UMLS_extension(lines, metadir, **flags)
     # Write the modified terminology to disk.
     for row in lines:
         try:
@@ -101,6 +102,13 @@ def _extend_MEDIC_with_UMLS(medic, metadir, target):
         except IndexError:  # mid-file comments
             pass  # no packing needed
         writer.writerow(row)
+
+
+def _apply_UMLS_extension(lines, metadir, divide=True, names=True):
+    if divide:
+        _divide_polysemous_concepts(lines, metadir)
+    if names:
+        _add_UMLS_names(lines, metadir)
 
 
 class _MedicBuffer:
@@ -158,6 +166,76 @@ class _MedicBuffer:
                 yield prefix + row[C.CODE]
 
     _prefixes = {'MSH': 'MESH:', 'OMIM': 'OMIM:'}
+
+
+class _divide_polysemous_concepts(_MedicBuffer):
+    '''
+    Split up polysemous concepts into sub-concepts.
+    '''
+    def __init__(self, lines, metadir):
+        self._names = {}
+        self._targets = {}
+        super().__init__(lines, metadir)
+
+    def _setup(self):
+        '''
+        Find polysemous entries.
+        '''
+        for line in self._iterlines():
+            name, id_, alt, *_, syn = line
+            if len(alt) > 1:
+                self._index(id_, alt, name, *syn)
+
+    def _index(self, main, alt, *names):
+        self._names[main] = OrderedDict((n.lower(), n) for n in names)
+        for id_ in alt:
+            self._names[id_] = {}
+            self._targets[id_] = main
+
+    def _use(self, ids, conc):
+        names = [r[C.STR].lower() for r in conc]
+        for id_ in ids:
+            self._separate(id_, names)
+
+    def _separate(self, id_, synonyms):
+        '''
+        Use the synonyms for this ID to separate it from its siblings.
+        '''
+        try:
+            main = self._targets[id_]
+        except KeyError:
+            return
+
+        for name_lc in synonyms:
+            try:
+                name = self._names[main].pop(name_lc)
+            except KeyError:
+                continue
+            self._names[id_][name_lc] = name
+
+    def _flush(self):
+        copy = []
+        for line in self._lines:
+            if line[0].startswith('#'):  # also copy mid-file comments
+                copy.append(line)
+                continue
+
+            name, id_, alt, def_, *hierarchy, syn = line
+            if len(alt) <= 1:
+                copy.append(line)
+                continue
+
+            for i in (id_, *alt):
+                try:
+                    name, *syn = self._names[i].values()
+                except ValueError:
+                    # The division wasn't perfect. Fall back to using
+                    # the superordinate preferred name.
+                    name, syn = line[0], ()
+                syn = tuple(syn)  # don't change type
+                copy.append([name, i, (), def_, *hierarchy, syn])
+                def_ = ''  # use definition for main ID only
+        self._lines[:] = copy
 
 
 class _add_UMLS_names(_MedicBuffer):
