@@ -32,10 +32,13 @@ def main():
     ap.add_argument(
         '-n', '--names', action='store_true',
         help='add more synonyms from UMLS')
+    ap.add_argument(
+        '-f', '--definitions', action='store_true',
+        help='complement missing definitions using UMLS')
     args = ap.parse_args()
 
-    if not any((args.divide, args.names)):
-        ap.error('nothing to do without at least one of -d/-n')
+    if not any((args.divide, args.names, args.definitions)):
+        ap.error('nothing to do without at least one of -d/-n/-f')
 
     from . import extend_MEDIC_with_UMLS
     extend_MEDIC_with_UMLS(**vars(args))

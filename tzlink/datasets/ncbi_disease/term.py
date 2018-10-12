@@ -14,11 +14,13 @@ from collections import OrderedDict
 
 from ..terminology import DictEntry
 from ...util.util import smart_open
-from ...util.umls import read_RRF, iterconcepts, C
+from ...util.umls import read_RRF, iterconcepts, co_rows, C, D
 
 
 # Column IDs of the MEDIC TSV.
+IDM = 1  # main ID
 ALT = 2
+DEF = 3
 SYN = 7
 
 
@@ -104,11 +106,14 @@ def _extend_MEDIC_with_UMLS(medic, metadir, target, **flags):
         writer.writerow(row)
 
 
-def _apply_UMLS_extension(lines, metadir, divide=True, names=True):
+def _apply_UMLS_extension(lines, metadir,
+                          divide=True, names=True, definitions=True):
     if divide:
         _divide_polysemous_concepts(lines, metadir)
     if names:
         _add_UMLS_names(lines, metadir)
+    if definitions:
+        _add_UMLS_definitions(lines, metadir)
 
 
 class _MedicBuffer:
@@ -280,3 +285,40 @@ class _add_UMLS_names(_MedicBuffer):
             newnames = tuple(n for n in names.values() if n is not None)
             if newnames:
                 line[SYN] += newnames
+
+
+class _add_UMLS_definitions(_MedicBuffer):
+    '''
+    Complement missing definitions from UMLS.
+    '''
+    def __init__(self, lines, metadir):
+        self._definitions = co_rows(read_RRF(metadir, 'DEF'))
+        self._targets = {}
+        super().__init__(lines, metadir)
+
+    def _setup(self):
+        for line in self._iterlines():
+            if not line[DEF]:
+                for i in (line[IDM], *line[ALT]):
+                    self._targets.setdefault(i, [])
+
+    def _use(self, ids, conc):
+        targets = [self._targets[i] for i in ids if i in self._targets]
+        if targets:
+            cui = conc[0][C.CUI]
+            defs = [r[D.DEF] for r in self._definitions.send(cui)]
+            self._add_definitions(targets, defs)
+
+    @staticmethod
+    def _add_definitions(targets, defs):
+        targets.sort(key=len)  # serve first the entries with fewer definitions
+        defs.sort(key=len, reverse=True)  # prefer longer definitions
+        for tgt, def_ in zip(targets, defs):
+            tgt.append(def_)
+
+    def _flush(self):
+        for line in self._iterlines():
+            for i in (line[IDM], *line[ALT]):
+                newdefs = self._targets.get(i)
+                if newdefs:
+                    line[DEF] = max(newdefs, key=len)
