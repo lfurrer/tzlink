@@ -189,6 +189,11 @@ class Sampler:
                     if name not in ignored:
                         _add(self.conf[section][name])
 
+        # When changes to the code make obsolete previously cached datasets,
+        # update this token.
+        if self.conf.general.dataset == 'ncbi-disease':
+            _add('separate alt concepts')
+
         return h.hexdigest()
 
 

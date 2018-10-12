@@ -36,6 +36,22 @@ def parse_MEDIC_terminology(source):
 
 
 def _parse_MEDIC_terminology(file):
+    for entry in _parse_MEDIC_entries(file):
+        # Quite frequently, MEDIC lists multiple alternative OMIM IDs for a
+        # single MESH ID. These are subconcepts that are annotated separately
+        # in the corpus, so we need to break them up into separate entries
+        # with a main ID each, in order for the CNN to produce them.
+        if len(entry.alt) <= 1:
+            # A single alternative can be used interchangeably with the main ID
+            # according to the guidelines.
+            yield entry
+        else:
+            yield entry._replace(alt=())
+            for alt in entry.alt:
+                yield entry._replace(id=alt, alt=())
+
+
+def _parse_MEDIC_entries(file):
     '''
     Input fields:
         DiseaseName
@@ -73,7 +89,6 @@ def _unpack_list_value_fields(row):
     '''Break up the list-value fields "alt" and "syn".'''
     for i in (ALT, SYN):
         row[i] = tuple(row[i].split('|') if row[i] else ())
-
 
 def _pack_list_value_fields(row):
     for i in (ALT, SYN):
