@@ -108,10 +108,10 @@ def _extend_MEDIC_with_UMLS(medic, metadir, target, **flags):
 
 def _apply_UMLS_extension(lines, metadir,
                           divide=True, names=True, definitions=True):
-    if divide:
-        _divide_polysemous_concepts(lines, metadir)
     if names:
         _add_UMLS_names(lines, metadir)
+    if divide:
+        _divide_polysemous_concepts(lines, metadir)
     if definitions:
         _add_UMLS_definitions(lines, metadir)
 
