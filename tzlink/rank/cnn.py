@@ -47,9 +47,8 @@ def _create_model(conf, sampler):
     inp_scores = Input(shape=(len(conf.candidates.generator.split('\n')),))
     inp_overlap = Input(shape=(1,))  # token overlap between q and a
 
-    v_sem = PairwiseSimilarity()(sem_mentions)
     join_layer = Concatenate()(
-        [*sem_mentions, v_sem, *sem_context, inp_scores, inp_overlap])
+        [*sem_mentions, *sem_context, inp_scores, inp_overlap])
     hidden_layer = Dense(units=K.int_shape(join_layer)[-1],
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
