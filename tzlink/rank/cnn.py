@@ -48,12 +48,13 @@ def _create_model(conf, sampler):
     inp_overlap = Input(shape=(1,))  # token overlap between q and a
 
     join_layer = Concatenate()(
-        [*sem_mentions, *sem_context, inp_scores, inp_overlap])
+        [sem_mentions[1], *sem_context, inp_scores, inp_overlap])
     hidden_layer = Dense(units=K.int_shape(join_layer)[-1],
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(*inp_mentions, *inp_context, inp_scores, inp_overlap),
+    i = len(inp_mentions) // 2
+    model = Model(inputs=(*inp_mentions[i:], *inp_context, inp_scores, inp_overlap),
                   outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model

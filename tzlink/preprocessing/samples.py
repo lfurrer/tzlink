@@ -250,7 +250,7 @@ class DataSet:
     @property
     def x(self):
         '''List of input tensors.'''
-        return [*self.x_q, *self.x_a, *self.ctxt_q, *self.ctxt_a,
+        return [*self.x_a, *self.ctxt_q, *self.ctxt_a,
                 self.x_scores, self.x_overlap]
 
     @staticmethod
