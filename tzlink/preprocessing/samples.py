@@ -250,8 +250,7 @@ class DataSet:
     @property
     def x(self):
         '''List of input tensors.'''
-        return [*self.x_q, *self.x_a, *self.ctxt_q, *self.ctxt_a,
-                self.x_scores, self.x_overlap]
+        return [self.x_scores, self.x_overlap]
 
     @staticmethod
     def _word_input_shape(vecs):

@@ -40,21 +40,15 @@ def run_training(conf, dumpfn, **evalparams):
 
 def _create_model(conf, sampler):
     # Embedding layers are shared among all inputs.
-    emb = [_embedding_layer(conf[emb], sampler.emb[emb].emb_matrix)
-           for emb in conf.rank.embeddings]
-    inp_mentions, sem_mentions = _semantic_repr_qa(conf, emb, 'sample_size')
-    inp_context, sem_context = _semantic_repr_qa(conf, emb, 'context_size')
     inp_scores = Input(shape=(len(conf.candidates.generator.split('\n')),))
     inp_overlap = Input(shape=(1,))  # token overlap between q and a
 
-    v_sem = PairwiseSimilarity()(sem_mentions)
-    join_layer = Concatenate()(
-        [*sem_mentions, v_sem, *sem_context, inp_scores, inp_overlap])
+    join_layer = Concatenate()([inp_scores, inp_overlap])
     hidden_layer = Dense(units=K.int_shape(join_layer)[-1],
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(*inp_mentions, *inp_context, inp_scores, inp_overlap),
+    model = Model(inputs=(inp_scores, inp_overlap),
                   outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
