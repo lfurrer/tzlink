@@ -49,12 +49,13 @@ def _create_model(conf, sampler):
 
     v_sem = PairwiseSimilarity()(sem_mentions)
     join_layer = Concatenate()(
-        [*sem_mentions, v_sem, *sem_context, inp_scores, inp_overlap])
+        [*sem_mentions, v_sem, sem_context[1], inp_scores, inp_overlap])
     hidden_layer = Dense(units=K.int_shape(join_layer)[-1],
                          activation=conf.rank.activation)(join_layer)
     logistic_regression = Dense(units=1, activation='sigmoid')(hidden_layer)
 
-    model = Model(inputs=(*inp_mentions, *inp_context, inp_scores, inp_overlap),
+    i = len(inp_context) // 2
+    model = Model(inputs=(*inp_mentions, *inp_context[i:], inp_scores, inp_overlap),
                   outputs=logistic_regression)
     model.compile(optimizer=conf.rank.optimizer, loss=conf.rank.loss)
     return model
