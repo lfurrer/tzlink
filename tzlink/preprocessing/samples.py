@@ -188,6 +188,10 @@ class Sampler:
                     if name not in ignored:
                         _add(self.conf[section][name])
 
+        # When changes to the code make obsolete previously cached datasets,
+        # update this token.
+        _add('fix information leak in definition lookup')
+
         return h.hexdigest()
 
 

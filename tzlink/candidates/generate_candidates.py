@@ -112,7 +112,7 @@ class _BaseCandidateGenerator:
         for subset, label in ((positive, True), (negative, False)):
             for cand in subset:
                 score = candidates.get(cand, self.null_score)
-                def_ = self._definition(ref_ids, cand)
+                def_ = self._definition(cand)
                 yield cand, score, def_, label
 
     def _positive_samples(self, ref_ids):
@@ -120,8 +120,8 @@ class _BaseCandidateGenerator:
         positive = self.terminology.names(ref_ids)
         return positive
 
-    def _definition(self, ref_ids, name):
-        defs = self.terminology.definitions(ref_ids, name)
+    def _definition(self, name):
+        defs = self.terminology.definitions(name)
         return max(defs, key=len, default='')
 
     @staticmethod

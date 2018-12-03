@@ -70,17 +70,11 @@ class Terminology:
                 names.update(e.syn)
         return names
 
-    def definitions(self, ids, name=None):
+    def definitions(self, name):
         '''
-        Get all definitions given for these IDs.
-
-        If name is given, only include concepts using this name.
+        Get all definitions associated with this name.
         '''
-        entries = (e for i in ids for e in self._by_id.get(i, ()))
-        if name is not None:
-            entries = set(entries)
-            entries.intersection_update(self._by_name.get(name, ()))
-        return set(e.def_ for e in entries)
+        return set(e.def_ for e in self._by_name.get(name, ()))
 
     def canonical_ids(self, id_):
         '''
