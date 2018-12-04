@@ -27,6 +27,12 @@ def prepare(dir_, subset):
     def _path(label):
         return os.path.join(dir_, filenames[label])
 
+    # Special value "all": iterate over all documents.
+    if subset == 'all':
+        for ss in ('train', 'dev', 'test'):
+            yield (_path(ss), iter)
+        return
+
     # The first fold is the train/dev split provided by the corpus creators.
     if subset in ('test', 'dev', 'dev1', 'train', 'train1'):
         yield (_path(subset.rstrip('1')), iter)
@@ -47,8 +53,6 @@ def prepare(dir_, subset):
             if check(i in fold):
                 yield doc
     yield (_path('train'), _select)
-
-
 
 
 _dev2 = [

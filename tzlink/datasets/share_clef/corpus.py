@@ -39,6 +39,14 @@ def parse_ShARe_CLEF_corpus(dir_, subset, terminology=None):
     '''
     del terminology  # unused compatibility argument
 
+    if subset == 'all':
+        for ss in ('train', 'dev', 'test'):
+            yield from _parse_ShARe_CLEF_corpus(dir_, ss)
+    else:
+        yield from _parse_ShARe_CLEF_corpus(dir_, subset)
+
+
+def _parse_ShARe_CLEF_corpus(dir_, subset):
     subdir, ids = subsets.docs(subset)
     rep_tmpl = os.path.join(dir_, subdir, 'reports', '{}.txt')
     ann_tmpl = os.path.join(dir_, subdir, 'annotations', '{}.pipe.txt')
