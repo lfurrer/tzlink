@@ -14,7 +14,6 @@ import os
 import pickle
 import logging
 import tarfile
-import hashlib
 import multiprocessing as mp
 from collections import defaultdict, namedtuple
 
@@ -24,7 +23,7 @@ from ..datasets.load import load_data, load_dict
 from .vectorize import load_wemb, Vectorizer
 from .overlap import TokenOverlap
 from ..candidates.generate_candidates import candidate_generator
-from ..util.util import CacheDict, TypeHider, smart_open
+from ..util.util import CacheDict, TypeHider, smart_open, ConfHash
 
 
 class Sampler:
@@ -55,7 +54,7 @@ class Sampler:
     def _load_embeddings(self, which):
         econf = self.conf[which]
         logging.info('loading pretrained embeddings...')
-        voc_index, emb_matrix = load_wemb(econf)
+        voc_index, emb_matrix = load_wemb(self.conf, econf)
         logging.info('loading vectorizer...')
         vectorizers = (Vectorizer(econf, voc_index, size)
                        for size in ('sample_size', 'context_size'))
@@ -172,25 +171,23 @@ class Sampler:
         '''
         Assemble all relevant settings into a hash key.
         '''
-        h = hashlib.sha1()
-        def _add(obj):
-            h.update(repr(obj).encode('utf8'))
+        h = ConfHash()
 
-        _add(subset)
-        _add(oracle)
-        _add(self.conf.candidates.generator)
-        _add(self.conf.rank.embeddings)
+        h.add(subset)
+        h.add(oracle)
+        h.add(self.conf.candidates.generator)
+        h.add(self.conf.rank.embeddings)
 
         ignored = {'rootpath', 'timestamp', 'workers', 'startup_scripts'}
         for section in sorted(self.conf):
             if section.startswith('emb') or section == self.conf.general.dataset:
                 for name in sorted(self.conf[section]):
                     if name not in ignored:
-                        _add(self.conf[section][name])
+                        h.add(self.conf[section][name])
 
         # When changes to the code make obsolete previously cached datasets,
         # update this token.
-        _add('fix information leak in definition lookup')
+        h.add('trim word-vector table to actual vocabulary')
 
         return h.hexdigest()
 

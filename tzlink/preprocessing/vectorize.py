@@ -10,35 +10,69 @@ Convert text to numerical vectors.
 
 
 import re
+import os
+import logging
 from string import punctuation
 
 import numpy as np
 from gensim.models.keyedvectors import KeyedVectors
 
 from .tokenization import create_tokenizer
-from ..util.util import identity, CacheDict
+from ..datasets.load import itertext_corpus, itertext_terminology
+from ..util.util import identity, CacheDict, smart_open, ConfHash
 
 
-def load_wemb(econf):
+def load_wemb(conf, econf):
     '''
     Load embeddings from disk and create a lookup table.
     '''
+    # Check for a cached copy of the trimmed subset.
+    path = _trimmed_fn(conf, econf)
+    if os.path.exists(path):
+        logging.info('load trimmed vectors from %s', path)
+        with np.load(path) as f:
+            vocab = f['vocab']
+            matrix = f['matrix']
+    else:
+        logging.info('trim embedding table to actual vocabulary size')
+        vocab, matrix = trim_wemb(conf, econf)
+        logging.info('export trimmed vectors to %s', path)
+        with smart_open(path, 'wb') as f:
+            np.savez_compressed(f, vocab=vocab, matrix=matrix)
+    lookup = {w: i for i, w in enumerate(vocab, 2)}  # +2 for PAD and UNK
+    return lookup, matrix
+
+
+def trim_wemb(conf, econf):
+    '''
+    Trim embeddings to the minimally required size and load them.
+    '''
+    # Load the embeddings from disk.
     fn = econf.embedding_fn
     if fn.endswith('.kv'):
         wv = KeyedVectors.load(fn, mmap='r')
     else:
         wv = KeyedVectors.load_word2vec_format(fn, binary=fn.endswith('.bin'))
-    matrix = wv.syn0
-    vocab = _adapt_mapping(econf, wv)
 
+    # Account for mapping changes due to preprocessing (eg. stemming).
+    vocab = _adapt_mapping(econf, wv)
+    vocab = {w: e.index for w, e in vocab.items()}
+
+    # Reduce the matrix to the actual vocabulary of the dataset.
+    used = _get_dataset_vocab(conf, econf, vocab)
+    mapping = {old: new for new, old in enumerate(sorted(used))}  # preserve order
+    ds_vocab = [None] * len(mapping)
     # Add two rows in the beginning: one for padding and one for unknown words.
-    dim = matrix.shape[1]
-    dtype = matrix.dtype
-    padding = np.zeros(dim, dtype)
-    unknown = np.random.standard_normal(dim).astype(dtype)
-    matrix = np.concatenate([[padding, unknown], matrix])
-    lookup = {w: e.index+2 for w, e in vocab.items()}
-    return lookup, matrix
+    shape = len(mapping) + 2, wv.vectors.shape[1]
+    matrix = np.zeros(shape, dtype=wv.vectors.dtype)
+    matrix[1] = np.random.standard_normal(shape[1])  # unknown words
+    for w, i in vocab.items():
+        n = mapping.get(i)
+        if n is not None:
+            ds_vocab[n] = w
+            matrix[n+2] = wv.vectors[i]
+
+    return ds_vocab, matrix
 
 
 def _adapt_mapping(econf, wv):
@@ -55,6 +89,43 @@ def _adapt_mapping(econf, wv):
         if modified not in vocab or vocab[modified].count < entry.count:
             vocab[modified] = entry
     return vocab
+
+
+def _get_dataset_vocab(conf, econf, emb_vocab):
+    ds_vocab = set()
+    vec = Vectorizer(econf, emb_vocab, 'sample_size')
+    vec.PAD = vec.UNK = None  # unset these as this vocab starts from 0
+    for text in _itertext(conf):
+        ds_vocab.update(vec.indices(text))
+    ds_vocab.discard(None)
+    return ds_vocab
+
+
+def _itertext(conf):
+    '''Iterate over all corpus and terminology text.'''
+    yield from itertext_corpus(conf, 'all')
+    yield from itertext_terminology(conf)
+
+
+def _trimmed_fn(conf, econf):
+    '''
+    Filename with a hash key of all relevant settings.
+    '''
+    h = ConfHash()
+
+    dataset = conf.general.dataset
+    h.add(dataset)
+    h.add(conf[dataset].corpus_dir)
+    h.add(conf[dataset].dict_fn)
+
+    h.add(econf.embedding_fn)
+    h.add(econf.preprocess.lower())
+    h.add(econf.tokenizer.lower())
+    h.add(getattr(econf, "tokenizer_model", None))
+
+    fn = conf.general.vocab_cache.format(h.hexdigest())
+    return fn
+
 
 
 def get_preprocessing(econf):

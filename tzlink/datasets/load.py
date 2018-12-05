@@ -43,9 +43,13 @@ def load_dict(conf):
     '''
     Read a dict file into a Terminology instance.
     '''
+    return Terminology(_dict_entries(conf))
+
+
+def _dict_entries(conf):
     dataset = conf.general.dataset
     fn = conf[dataset].dict_fn
-    return Terminology(dict_loader[dataset](fn))
+    return dict_loader[dataset](fn)
 
 
 def itermentions(corpus):
@@ -56,3 +60,32 @@ def itermentions(corpus):
         for sec in doc['sections']:
             for mention in sec['mentions']:
                 yield mention['text'], mention['id']
+
+
+def itertext_corpus(conf, subset, mentions=True, context=True):
+    '''
+    Iterate over textual contents of the corpus.
+    '''
+    # The NCBID loader requires a terminology, but we ignore its actions here.
+    dummy = Terminology([])
+    dummy.canonical_ids = lambda id_: (id_,)
+    for doc in load_data(conf, subset, dummy):
+        for sec in doc['sections']:
+            if context:
+                yield sec['text']
+            if mentions:
+                for mention in sec['mentions']:
+                    yield mention['text']
+
+
+def itertext_terminology(conf, names=True, syn=True, defs=True):
+    '''
+    Iterate over textual contents of the terminology.
+    '''
+    for entry in _dict_entries(conf):
+        if names:
+            yield entry.name
+        if syn:
+            yield from entry.syn
+        if defs and entry.def_:
+            yield entry.def_

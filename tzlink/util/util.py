@@ -13,6 +13,7 @@ import io
 import os
 import sys
 import gzip
+import hashlib
 import subprocess as sp
 from collections import defaultdict, Counter, OrderedDict
 from contextlib import contextmanager
@@ -146,3 +147,17 @@ class TypeHider:
 
     def __getattr__(self, name):
         return getattr(self._obj, name)
+
+
+class ConfHash:
+    '''Thin hashlib wrapper for adding arbitrary objects.'''
+    def __init__(self):
+        self.h = hashlib.sha1()
+
+    def add(self, obj):
+        '''Add an object with a stable repr() output.'''
+        self.h.update(repr(obj).encode('utf8'))
+
+    def hexdigest(self):
+        '''40-character representation.'''
+        return self.h.hexdigest()
