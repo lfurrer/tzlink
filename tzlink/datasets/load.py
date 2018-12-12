@@ -43,7 +43,8 @@ def load_dict(conf):
     '''
     Read a dict file into a Terminology instance.
     '''
-    return Terminology(_dict_entries(conf))
+    amb = conf.candidates.suppress_ambiguous
+    return Terminology(_dict_entries(conf), amb)
 
 
 def _dict_entries(conf):

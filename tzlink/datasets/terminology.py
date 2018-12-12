@@ -20,10 +20,12 @@ class Terminology:
     '''
     Terminology indexed by names and IDs.
     '''
-    def __init__(self, dict_entries):
+    def __init__(self, dict_entries, remove_ambiguous=False):
         self._by_name = {}
         self._by_id = {}
         self._index(dict_entries)
+        if remove_ambiguous:
+            self.remove_ambiguous()
 
     def _index(self, entries):
         for entry in entries:
@@ -40,6 +42,55 @@ class Terminology:
     def _add(index, entry, main, secondary):
         for elem in (main, *secondary):
             index.setdefault(elem, []).append(entry)
+
+    def remove_ambiguous(self):
+        '''
+        Remove ambiguous names from the terminology.
+        '''
+        delenda = []
+        for name, entries in self._by_name.items():
+            if len(entries) > 1:
+                # There might be multiple entries with the same ID --
+                # that doesn't count as ambiguity.
+                if len(set(e.id for e in entries)) > 1:
+                    # Don't delete right away --
+                    # dict size shouldn't change during iteration.
+                    delenda.append(name)
+        for name in delenda:
+            self._remove_ambiguous(name)
+
+    def _remove_ambiguous(self, name):
+        # Remove from self._by_name.
+        entries = self._by_name.pop(name)
+        # Remove from self._by_id.
+        for entry in entries:
+            self._remove_name_entry(entry, name)
+
+    def _remove_name_entry(self, entry, name):
+        newentry = entry._replace(syn=tuple(n for n in entry.syn if n != name))
+        if newentry.name == name:
+            try:
+                newentry = newentry._replace(name=newentry.syn[0],
+                                             syn=newentry.syn[1:])
+            except IndexError:
+                # No synonyms left. Delete the entry altogether.
+                newentry = None
+        for id_ in (entry.id, *entry.alt):
+            entries = self._by_id[id_]
+            try:
+                entries.remove(entry)
+            except ValueError:
+                # It has already gone.
+                continue
+            if newentry is not None:
+                entries.append(newentry)
+            elif not entries:
+                # If deleting this name means that this ID has no more names
+                # associated with it, then the name is undeleted for this ID.
+                # Re-insert the original entry here and in the name index.
+                entries.append(entry)
+                if entry not in self._by_name.setdefault(name, []):
+                    self._by_name[name].append(entry)
 
     def has_id(self, id_):
         '''

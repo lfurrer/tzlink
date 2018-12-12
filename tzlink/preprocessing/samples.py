@@ -176,6 +176,7 @@ class Sampler:
         h.add(subset)
         h.add(oracle)
         h.add(self.conf.candidates.generator)
+        h.add(self.conf.candidates.suppress_ambiguous)
         h.add(self.conf.rank.embeddings)
 
         ignored = {'rootpath', 'timestamp', 'workers', 'trainable'}

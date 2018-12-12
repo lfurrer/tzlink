@@ -16,7 +16,7 @@ embeddings: data/embeddings/wvec_50_haodi-li-et-al.bin
 
 bpe: $(addprefix data/embeddings/bpe_,abstract10000model vectors_10000_50_w2v.txt)
 
-embeddings-chiu: data/embeddings/wvec_200_win-30_chiu-et-al.bin
+embeddings-chiu: data/embeddings/wvec_200_win-2_chiu-et-al.bin
 
 
 ncbi-disease: nd-corpus nd-terminology
@@ -38,12 +38,13 @@ data/ncbi-disease/%.txt: | data/ncbi-disease
 	wget -O - https://www.ncbi.nlm.nih.gov/CBBresearch/Dogan/DISEASE/$(subst .txt,.zip,$(@F)) | funzip > $@
 
 data/ncbi-disease/CTD_diseases.tsv: | data/ncbi-disease
-	wget -O - https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/tmTools/download/DNorm/DNorm-0.0.7.tgz | tar -xzOf - DNorm-0.0.7/data/$(@F) > $@
+	@# sed filter fixes a few typos in the MEDIC file (trailing commas, missing pipes).
+	wget -O - https://www.ncbi.nlm.nih.gov/CBBresearch/Lu/Demo/tmTools/download/DNorm/DNorm-0.0.7.tgz | tar -xzOf - DNorm-0.0.7/data/$(@F) | sed 's/,|/|/g;s/;ALS10 /|ALS10|/' > $@
 
 # Optional leaf targets.
 data/embeddings/bpe%: | data/embeddings
 	scp evex.utu.fi:/home/lhchan/glove/selftrained_bpe_model/$(subst bpe_,,$(@F)) $@
 
-data/embeddings/wvec_200_win-30_chiu-et-al.bin: | data/embeddings
+data/embeddings/wvec_200_win-2_chiu-et-al.bin: | data/embeddings
 	@# File ID given in https://github.com/cambridgeltl/BioNLP-2016 (README.md)
-	python3 tzlink/util/gdrive.py 0BzMCqpcgEJgiUWs0ZnU0NlFTam8 | tar -xzOf - bio_nlp_vec/PubMed-shuffle-win-30.bin > $@
+	python3 tzlink/util/gdrive.py 0BzMCqpcgEJgiUWs0ZnU0NlFTam8 | tar -xzOf - bio_nlp_vec/PubMed-shuffle-win-2.bin > $@
