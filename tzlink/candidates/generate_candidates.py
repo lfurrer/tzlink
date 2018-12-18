@@ -63,17 +63,19 @@ class _BaseCandidateGenerator:
 
     def samples(self, mention, ref_ids, oracle=0):
         '''
-        Iterate over quadruples <candidate, score, definition, label>.
+        Iterate over quintuples <candidate, score, definition, label, ids>.
 
         The candidate is a name string.
-        The score correspondes to the confidence of the
-        candidate generator.
+        The score corresponds to the confidence of the
+        candidate generator(s).
+        The definition (concept description) is a string.
         The label is True and False for positive and negative
         samples, respectively.
+        The ids are a set of string.
 
-        Each synonym generates a separate positive sample.
+        Each synonym generates a separate sample.
 
-        If oracle is 0, some names might be lacking positive
+        If oracle is 0, some mentions might be lacking positive
         samples (whenever the candidate retrieval mechanism
         can't find any). Otherwise, positive samples are
         taken from the ground-truth data until the specified
@@ -93,7 +95,7 @@ class _BaseCandidateGenerator:
 
         Return a nested iterator:
             <mention, context, samples> for each mention
-                <candidate, score, definition, label> for each sample
+                <candidate, score, definition, label, ids> for each sample
         '''
         self.precompute([m for m, _, _ in items])
         for mention, ref_ids, context in items:
@@ -112,17 +114,20 @@ class _BaseCandidateGenerator:
         for subset, label in ((positive, True), (negative, False)):
             for cand in subset:
                 score = candidates.get(cand, self.null_score)
-                def_ = self._definition(cand)
-                yield cand, score, def_, label
+                for def_, ids in self._definitions(cand):
+                    def_label = label and any(i in ref_ids for i in ids)
+                    yield cand, score, def_, def_label, ids
 
     def _positive_samples(self, ref_ids):
         self.terminology_update(ref_ids)
         positive = self.terminology.names(ref_ids)
         return positive
 
-    def _definition(self, name):
-        defs = self.terminology.definitions(name)
-        return max(defs, key=len, default='')
+    def _definitions(self, name):
+        defs = self.terminology.definitions(name, include_ids=True)
+        if not defs:
+            return [('', set())]  # include this sample even without ID
+        return defs.items()
 
     @staticmethod
     def terminology_update(ref_ids):
