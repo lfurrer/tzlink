@@ -121,23 +121,11 @@ class Terminology:
                 names.update(e.syn)
         return names
 
-    def definitions(self, name, include_ids=False):
+    def definitions(self, id_):
         '''
-        Get all definitions associated with this name.
-
-        By default, return a set of definitions.
-        If include_ids is True, return a dict instead,
-        having definitions as keys and the respective IDs
-        as values.
+        Get all definitions associated with this ID.
         '''
-        entries = self._by_name.get(name, ())
-        if not include_ids:
-            return set(e.def_ for e in entries)
-        else:
-            defs = {}
-            for e in entries:
-                defs.setdefault(e.def_, set()).add(e.id)
-            return defs
+        return set(e.def_ for e in self._by_id.get(id_, ()))
 
     def canonical_ids(self, id_):
         '''

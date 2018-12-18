@@ -188,7 +188,7 @@ class Sampler:
 
         # When changes to the code make obsolete previously cached datasets,
         # update this token.
-        h.add('separate sample for each definition')
+        h.add('only one sample per concept (ID)')
 
         return h.hexdigest()
 
@@ -394,7 +394,7 @@ def _task(items, oracle, cand_gen, vectorizers):
         vec_q = _vectorize(mention, 'mention')
         ctxt_q = _vectorize(ctxt_q, 'context')
         data = []
-        for cand, score, ctxt_a, label, ids in samples:
+        for cand, score, ctxt_a, label, id_ in samples:
             vec_a = _vectorize(cand, 'mention')
             ctxt_a = _vectorize(ctxt_a, 'context')
             data.append((
@@ -406,6 +406,6 @@ def _task(items, oracle, cand_gen, vectorizers):
                 overlap.overlap(mention, cand),
                 (float(label),),
                 cand,
-                ids,
+                (id_,),
             ))
         yield data

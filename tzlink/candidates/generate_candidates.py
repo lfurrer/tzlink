@@ -11,6 +11,7 @@ Candidate generation.
 
 import re
 import ast
+import heapq
 import itertools as it
 from collections import defaultdict, Counter
 
@@ -63,17 +64,18 @@ class _BaseCandidateGenerator:
 
     def samples(self, mention, ref_ids, oracle=0):
         '''
-        Iterate over quintuples <candidate, score, definition, label, ids>.
+        Iterate over quintuples <candidates, score, definitions, label, id>.
 
-        The candidate is a name string.
+        The candidates (names) are a tuple of string.
         The score corresponds to the confidence of the
         candidate generator(s).
-        The definition (concept description) is a string.
+        The definitions (concept descriptions) are a tuple
+        of string.
         The label is True and False for positive and negative
         samples, respectively.
-        The ids are a set of string.
+        The ID is a single string.
 
-        Each synonym generates a separate sample.
+        Each concept generates a separate sample.
 
         If oracle is 0, some mentions might be lacking positive
         samples (whenever the candidate retrieval mechanism
@@ -95,7 +97,7 @@ class _BaseCandidateGenerator:
 
         Return a nested iterator:
             <mention, context, samples> for each mention
-                <candidate, score, definition, label, ids> for each sample
+                <candidates, score, definitions, label, id> for each sample
         '''
         self.precompute([m for m, _, _ in items])
         for mention, ref_ids, context in items:
@@ -103,31 +105,33 @@ class _BaseCandidateGenerator:
             yield mention, context, samples
 
     def _samples(self, mention, ref_ids, oracle):
-        candidates = self.scored_candidates(mention)
-        all_positive = self._positive_samples(ref_ids)
-        positive = all_positive.intersection(candidates)
-        negative = set(candidates).difference(positive)
-        if len(positive) < oracle:
-            missing = list(all_positive.difference(positive))
-            positive.update(self.topN(mention, missing, oracle-len(positive)))
-
-        for subset, label in ((positive, True), (negative, False)):
-            for cand in subset:
-                score = candidates.get(cand, self.null_score)
-                for def_, ids in self._definitions(cand):
-                    def_label = label and any(i in ref_ids for i in ids)
-                    yield cand, score, def_, def_label, ids
-
-    def _positive_samples(self, ref_ids):
         self.terminology_update(ref_ids)
-        positive = self.terminology.names(ref_ids)
-        return positive
+        candidates = self.scored_candidates(mention)
+        concepts = self._group_by_id(candidates)
+        positive_count = 0
+        for names, score, defs, id_ in concepts:
+            label = id_ in ref_ids
+            positive_count += label
+            yield names, score, defs, label, id_
 
-    def _definitions(self, name):
-        defs = self.terminology.definitions(name, include_ids=True)
-        if not defs:
-            return [('', set())]  # include this sample even without ID
-        return defs.items()
+        if positive_count < oracle:
+            positive = self.terminology.names(ref_ids)
+            missing = positive.difference(candidates)
+            scored = self.rank_given(mention, missing)
+            concepts = self._group_by_id(scored)
+            concepts = heapq.nlargest(oracle-positive_count, concepts,
+                                      key=lambda c: self._one_score(c[1]))
+            for names, score, defs, id_ in concepts:
+                yield names, score, defs, True, id_
+
+    def _group_by_id(self, scored):
+        ids = self.terminology.ids(scored)
+        for id_ in ids:
+            names = self.terminology.names((id_,)).intersection(scored)
+            names = sorted(names, key=lambda n: -self._one_score(scored[n]))
+            score = self._best_score(scored[n] for n in names)
+            defs = sorted(self.terminology.definitions(id_), key=len)
+            yield tuple(names), score, tuple(defs), id_
 
     @staticmethod
     def terminology_update(ref_ids):
@@ -157,9 +161,25 @@ class _BaseCandidateGenerator:
         '''
         raise NotImplementedError
 
+    @staticmethod
+    def _one_score(score):
+        # Hook for the _MultiGenerator.
+        return score
+
+    @staticmethod
+    def _best_score(scores):
+        # Hook for the _MultiGenerator.
+        return max(scores)
+
     def topN(self, mention, candidates, n):
         '''
         Rank the given candidates for mention and take the best n.
+        '''
+        raise NotImplementedError
+
+    def rank_given(self, mention, candidates):
+        '''
+        Rank the given candidates for mention by scoring them.
         '''
         raise NotImplementedError
 
@@ -197,11 +217,23 @@ class _MultiGenerator(_BaseCandidateGenerator):
         candidates.default_factory = None  # avoid closure (?)
         return candidates
 
+    @staticmethod
+    def _one_score(score):
+        return sum(score)
+
+    @staticmethod
+    def _best_score(scores):
+        return max(scores, key=sum)
+
     def topN(self, mention, candidates, n):
         best = OrderedCounter()
         for g in self.generators:
             best.update(g.topN(mention, candidates, n))
         return (c for c, _ in best.most_common(n))
+
+    def rank_given(self, mention, candidates):
+        return self._comb_scores(g.rank_given(mention, candidates)
+                                 for g in self.generators)
 
 
 class SGramCosineCandidates(_BaseCandidateGenerator):
@@ -307,10 +339,16 @@ class SGramCosineCandidates(_BaseCandidateGenerator):
             sim, self.size, self.threshold, self._names)
 
     def topN(self, mention, candidates, n):
+        return (c for c, _ in self._rank_given(mention, candidates, n, 0))
+
+    def rank_given(self, mention, candidates):
+        return dict(self._rank_given(mention, candidates, None, 0))
+
+    def _rank_given(self, mention, candidates, size, threshold):
         candidates = [c for c in candidates if c in self._name_index]
         cand_i = [self._name_index[c] for c in candidates]
         sim = self._similarities(mention, limit=cand_i)
-        return (c for c, _ in self._select_candidates(sim, n, 0, candidates))
+        return self._select_candidates(sim, size, threshold, candidates)
 
     def _similarities(self, mention, limit=None):
         if limit is None:
@@ -400,16 +438,22 @@ class PhraseVecFixedSetCandidates(_BaseCandidateGenerator):
         return self._pv.most_similar(positive=[vector], topn=self.size)
 
     def topN(self, mention, candidates, n):
+        return (c for c, _ in self._rank_given(mention, candidates, n))
+
+    def rank_given(self, mention, candidates):
+        return dict(self._rank_given(mention, candidates, None))
+
+    def _rank_given(self, mention, candidates, n):
         candidates = [c for c in candidates if c in self._pv.vocab]
         cand_i = [self._pv.vocab[c].index for c in candidates]
         cand_matrix = self._pv.syn0[cand_i]
         sim = cand_matrix.dot(self._phrase_vector(mention))
-        if len(candidates) > n:
+        if n and len(candidates) > n:
             top_i = np.argpartition(-sim, range(n))[:n]
         else:
             top_i = np.argsort(-sim)
         for i in top_i:
-            yield candidates[i]
+            yield candidates[i], sim[i]
 
 
 class _NonRankedCandidates(_BaseCandidateGenerator):
@@ -431,6 +475,11 @@ class _NonRankedCandidates(_BaseCandidateGenerator):
         # There's no way to rank the candidates, just pick the first n.
         del mention
         return candidates[:n]
+
+    def rank_given(self, mention, candidates):
+        # Again, the candidates can't be ranked.
+        del mention
+        return dict.fromkeys(candidates, self.null_score)
 
 
 class SymbolReplacementCandidates(_NonRankedCandidates):
