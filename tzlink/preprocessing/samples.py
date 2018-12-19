@@ -188,7 +188,7 @@ class Sampler:
 
         # When changes to the code make obsolete previously cached datasets,
         # update this token.
-        h.add('only one sample per concept (ID)')
+        h.add('context is always the whole document')
 
         return h.hexdigest()
 
@@ -349,9 +349,9 @@ def _deduplicated(corpus):
     mentions = defaultdict(list)
     for doc in corpus:
         docid = doc['docid']
+        context = tuple(s['text'] for s in doc['sections'])
         for sec in doc['sections']:
             offset = sec['offset']
-            context = sec['text']
             for mention in sec['mentions']:
                 key = mention['text'], mention['id'], context
                 occ = docid, offset + mention['start'], offset + mention['end']
