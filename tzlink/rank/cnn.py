@@ -71,19 +71,15 @@ def _semantic_repr_qa(conf, emb_layers, size_name):
 
 
 def _semantic_layers(conf, emb_info):
-    inp, emb = _word_layer(emb_info)
-    sem = _conv_pool_layers(conf, emb)
-    return inp, sem
-
-
-def _word_layer(emb_info):
-    inp, emb = [], []
+    inp, sem = [], []
     for size, emb_layer in emb_info:
         i = Input(shape=(size,))
         inp.append(i)
-        emb.append(emb_layer(i))
-    emb = _conditional_concat(emb)
-    return inp, emb
+        e = emb_layer(i)
+        for width in conf.rank.filter_width:
+            sem.append(_convolution_pooling(conf, width, e))
+    sem = _conditional_concat(sem)
+    return inp, sem
 
 
 def _embedding_layer(econf, matrix=None, **kwargs):
@@ -94,12 +90,6 @@ def _embedding_layer(econf, matrix=None, **kwargs):
     else:
         args = (econf.embedding_voc, econf.embedding_dim)
     return Embedding(*args, **kwargs)
-
-
-def _conv_pool_layers(conf, inputs):
-    outputs = [_convolution_pooling(conf, width, inputs)
-               for width in conf.rank.filter_width]
-    return _conditional_concat(outputs)
 
 
 def _convolution_pooling(conf, width, x):
