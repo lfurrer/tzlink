@@ -135,6 +135,11 @@ def get_preprocessing(econf):
     name = econf.preprocess.lower()
     if name == 'none':
         return None
+    if name == 'single_ws':
+        pattern = re.compile(r'\s+')
+        def _single_ws(text):
+            return pattern.sub(' ', text)
+        return _single_ws
     if name == 'stem':
         from .stem import PorterStemmer
         stemmer = PorterStemmer()

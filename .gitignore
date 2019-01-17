@@ -1,5 +1,6 @@
 # Large blobs and externally licensed data
 data/
+!data/embeddings/char_vectors_100_50_random.kv
 
 # Generated output
 runs/

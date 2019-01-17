@@ -16,6 +16,9 @@ def create_tokenizer(name, model=None):
     '''
     Select and instantiate a tokenizer.
     '''
+    if name == 'characters':
+        # Iterate over the characters of a string.
+        return iter
     if name == 'whitespace':
         # Simply split on whitespace.
         return str.split
