@@ -5,26 +5,28 @@
 
 
 '''
-Entry point function for running the ranking CNN.
+Top-level functions for running the ranking CNN.
 '''
 
 
-import sys
+# Make it possible to run `python3 -m tzlink.rank`.
+# In order for the startup script to work properly,
+# tzlink.launch.launch must be called before keras/
+# tensorflow are imported (which happens in tzlink.
+# rank.cnn).  Therefore, some package imports are
+# inside the top-level functions.
 
-from ..util.util import get_config
-from ..util.record import Recorder
-from ..util import startup
+
+from .predictions import handle_predictions
 
 
-def run(config, record=False, **kwargs):
-    '''
-    Run the CNN (incl. preprocessing).
-    '''
-    conf = get_config(config)
-    recorder = Recorder(conf)
-    startup.run_scripts(conf)
+def run_training(*args, **kwargs):
+    '''Train a model.'''
+    from . import cnn
+    cnn.run_training(*args, **kwargs)
 
-    from . import launch
-    launch.run(conf, summary=[sys.stdout, recorder.results], **kwargs)
-    if record:
-        recorder.dump()
+
+def prediction_samples(conf):
+    '''Get prediction samples.'''
+    from ..preprocessing import samples
+    return samples.Sampler(conf).prediction_samples()

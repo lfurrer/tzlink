@@ -40,7 +40,7 @@ def run_training(conf, dumpfn, **evalparams):
 
 def _create_model(conf, sampler):
     # Embedding layers are shared among all inputs.
-    emb = [_embedding_layer(conf[emb], sampler.emb[emb].emb_matrix)
+    emb = [embedding_layer(conf[emb], sampler.emb[emb].emb_matrix)
            for emb in conf.rank.embeddings]
     inp_mentions, sem_mentions = _semantic_repr_qa(conf, emb, 'sample_size')
     inp_context, sem_context = _semantic_repr_qa(conf, emb, 'context_size')
@@ -65,12 +65,13 @@ def _semantic_repr_qa(conf, emb_layers, size_name):
     emb_info = [(s, e) for s, e in zip(sizes, emb_layers) if s]
     if not emb_info:  # sample/context size is 0 -> omit entirely
         return [], []
-    nodes = (_semantic_layers(conf, emb_info) for _ in range(2))
+    nodes = (semantic_layers(conf, emb_info) for _ in range(2))
     (inp_q, inp_a), (sem_q, sem_a) = zip(*nodes)
     return inp_q + inp_a, [sem_q, sem_a]
 
 
-def _semantic_layers(conf, emb_info):
+def semantic_layers(conf, emb_info):
+    '''Layers for semantic representation.'''
     inp, sem = [], []
     for size, emb_layer in emb_info:
         i = Input(shape=(size,))
@@ -82,7 +83,8 @@ def _semantic_layers(conf, emb_info):
     return inp, sem
 
 
-def _embedding_layer(econf, matrix=None, **kwargs):
+def embedding_layer(econf, matrix=None, **kwargs):
+    '''A layer for word/character/... embeddings.'''
     if matrix is not None:
         args = matrix.shape
         kwargs.update(weights=[matrix],

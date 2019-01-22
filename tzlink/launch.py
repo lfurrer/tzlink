@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf8
 
-# Author: Lenz Furrer, 2018
+# Author: Lenz Furrer, 2018--2019
 
 
 '''
@@ -24,49 +24,66 @@ Run the ranking CNN (training or prediction).
 #   prediction).
 
 
+import sys
 import logging
 import tempfile
+import importlib
 import multiprocessing as mp
 
 import numpy as np
 
-from ..preprocessing import samples
-from .predictions import handle_predictions
+from .util.util import get_config
+from .util.record import Recorder
+from .util import startup
 
 
-def run(conf, train=True, dumpfns=(), **evalparams):
+def launch(config, record=False, **kwargs):
+    '''
+    Setup and run the CNN.
+    '''
+    conf = get_config(config)
+    recorder = Recorder(conf)
+    startup.run_scripts(conf)
+
+    run(conf, summary=[sys.stdout, recorder.results], **kwargs)
+    if record:
+        recorder.dump()
+
+
+def run(conf, mode, train=True, dumpfns=(), **evalparams):
     '''
     Run the CNN (incl. preprocessing).
     '''
+    module = importlib.import_module('tzlink.{}'.format(mode))
+    # Catch early some common option mistakes.
     if train:
         if not dumpfns:
             with tempfile.NamedTemporaryFile(delete=False) as f:
                 dumpfns = [f.name]
         elif len(dumpfns) > 1:
             raise ValueError('cannot save model to multiple files')
-        _run_train(conf, dumpfns[0], **evalparams)
+        _run_train(conf, module, dumpfns[0], **evalparams)
     else:
         if not dumpfns:
             raise ValueError('no model to train or load')
-        _run_predict(conf, dumpfns, **evalparams)
+        _run_predict(conf, module, dumpfns, **evalparams)
 
 
-def _run_train(conf, dumpfn, **evalparams):
+def _run_train(conf, module, dumpfn, **evalparams):
     '''
     Train a model and evaluate/predict.
     '''
-    from .cnn import run_training
-    run_training(conf, dumpfn, **evalparams)
+    module.run_training(conf, dumpfn, **evalparams)
 
 
-def _run_predict(conf, dumpfns, **evalparams):
+def _run_predict(conf, module, dumpfns, **evalparams):
     '''
     Load a model for evaluation/predictions.
     '''
-    val_data = samples.Sampler(conf).prediction_samples()
+    val_data = module.prediction_samples(conf)
     val_data.scores = _predict(conf, dumpfns, val_data.x)
     logging.info('evaluate and/or serialize...')
-    handle_predictions(conf, val_data, **evalparams)
+    module.handle_predictions(conf, val_data, **evalparams)
     logging.info('done.')
 
 
@@ -94,7 +111,7 @@ def _wrap_predict_one(args):
 
 def _predict_one(fn, x, batch_size):
     from keras.models import load_model
-    from .cnn import PairwiseSimilarity
+    from .rank.cnn import PairwiseSimilarity
 
     logging.info('load pretrained model from %s...', fn)
     model = load_model(fn, custom_objects={

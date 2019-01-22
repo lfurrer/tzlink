@@ -161,3 +161,8 @@ class ConfHash:
     def hexdigest(self):
         '''40-character representation.'''
         return self.h.hexdigest()
+
+
+def pack(*args, **kwargs):
+    '''Pack args and kwargs into a pair.'''
+    return args, kwargs
