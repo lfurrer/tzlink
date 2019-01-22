@@ -5,7 +5,7 @@
 
 
 '''
-Run the ranking CNN (training or prediction).
+Train or predict in ranking or classification mode.
 '''
 
 
@@ -83,7 +83,7 @@ def _run_predict(conf, module, dumpfns, **evalparams):
     val_data = module.prediction_samples(conf)
     val_data.scores = _predict(conf, dumpfns, val_data.x)
     logging.info('evaluate and/or serialize...')
-    module.handle_predictions(conf, val_data, **evalparams)
+    module.Evaluator.handle_predictions(conf, val_data, **evalparams)
     logging.info('done.')
 
 

@@ -17,8 +17,8 @@ def main():
     '''
     # Insert a command-line arg for mode switching.
     mode = pack(
-        'mode', choices=['rank'],
-        help='run as a ranking problem')
+        'mode', choices=['rank', 'clsf'],
+        help='ranking or classification approach?')
     ap = get_argparser(pre=[mode])
     args = ap.parse_args()
 

@@ -17,7 +17,7 @@ Top-level functions for running the ranking CNN.
 # inside the top-level functions.
 
 
-from .predictions import handle_predictions
+from .predictions import Evaluator
 
 
 def run_training(*args, **kwargs):

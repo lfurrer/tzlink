@@ -16,18 +16,6 @@ from collections import Counter
 from ..util.util import smart_open
 
 
-def handle_predictions(conf, data, summary=(sys.stdout,), predict=()):
-    '''
-    Write predictions to TSV files and/or print evaluation summaries.
-    '''
-    evaluator = Evaluator(conf, predict)
-    evaluator.evaluate(data)
-
-    for file in summary:
-        evaluator.summary(file)
-    evaluator.dump_predictions()
-
-
 class SummaryWriter:
     '''
     Write a summary line for each occurrence of a mention.
@@ -159,27 +147,19 @@ def _rm_tabs_nl(text):
     return text.replace('\t', ' ').replace('\n', ' ')
 
 
-# Map command-line args to Writer instances.
-_writer_names = {
-    'summary': SummaryWriter,
-    'rich': DetailedWriter,
-    'trec': TRECWriter,
-}
-
-
-class Evaluator:
+class BaseEvaluator:
     '''
-    Count a selection of outcomes and compute accuracy.
+    Interface for accuracy-based evaluators.
     '''
+    # Map command-line args to Writer types.
+    _writer_names = {}
+
     def __init__(self, conf, writers=()):
         self.conf = conf
-        self.writers = [_writer_names[w](conf) for w in writers]
+        self.writers = [self._writer_names[w](conf) for w in writers]
 
         self.correct = 0
         self.total = 0
-        self.unreachable = 0
-        self.ambiguous = 0
-        self.nocandidates = 0
 
     @property
     def accuracy(self):
@@ -195,10 +175,54 @@ class Evaluator:
         evaluator.evaluate(data)
         return evaluator
 
+    @classmethod
+    def handle_predictions(cls, conf, data, summary=(sys.stdout,), predict=()):
+        '''
+        Write predictions to TSV files and/or print evaluation summaries.
+        '''
+        evaluator = cls.from_data(conf, data, writers=predict)
+
+        for file in summary:
+            evaluator.summary(file)
+        evaluator.dump_predictions()
+
     def evaluate(self, data):
         '''
         Evaluate all predictions and push entries to the writers.
         '''
+        raise NotImplementedError
+
+    def summary(self, outfile, labels=None):
+        '''Write an evaluation summary to outfile.'''
+        if labels is None:
+            labels = 'accuracy correct total '.split()
+        for label in labels:
+            outfile.write('{:12} {:5}\n'.format(label, getattr(self, label)))
+
+    def dump_predictions(self):
+        '''Write all accumulated predictions to disk.'''
+        for writer in self.writers:
+            writer.dump()
+
+
+class Evaluator(BaseEvaluator):
+    '''
+    Count a selection of outcomes and compute accuracy.
+    '''
+    _writer_names = {
+        'summary': SummaryWriter,
+        'rich': DetailedWriter,
+        'trec': TRECWriter,
+    }
+
+    def __init__(self, conf, writers=()):
+        super().__init__(conf, writers)
+
+        self.unreachable = 0
+        self.ambiguous = 0
+        self.nocandidates = 0
+
+    def evaluate(self, data):
         for scores, ids, cands, y, mention, refs, occs in self._iterranges(data):
             ranking = sorted(zip(scores, cands, ids), reverse=True)
             decision = self._decide(ranking, ids, refs)
@@ -265,13 +289,8 @@ class Evaluator:
         elif n_ids > 1:
             self.ambiguous += 1
 
-    def summary(self, outfile):
-        '''Write an evaluation summary to outfile.'''
-        labels = 'accuracy correct total unreachable nocandidates ambiguous'
-        for label in labels.split():
-            outfile.write('{:12} {:5}\n'.format(label, getattr(self, label)))
-
-    def dump_predictions(self):
-        '''Write all accumulated predictions to disk.'''
-        for writer in self.writers:
-            writer.dump()
+    def summary(self, outfile, labels=None):
+        if labels is None:
+            labels = ('accuracy correct total '
+                      'unreachable nocandidates ambiguous').split()
+        super().summary(outfile, labels)

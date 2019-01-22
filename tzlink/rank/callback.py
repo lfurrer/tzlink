@@ -27,6 +27,9 @@ class EarlyStoppingRankingAccuracy(Callback):
             with validation data.
         dumpfn: path to save the best model.
     '''
+
+    evaltype = Evaluator
+
     def __init__(self, conf, val_data, dumpfn, evalparams):
         super().__init__()
 
@@ -77,4 +80,4 @@ class EarlyStoppingRankingAccuracy(Callback):
         self.val_data.scores = self.model.predict(
             self.val_data.x, batch_size=self.conf.rank.batch_size)
         writers = self.evalparams.get('predict', ())
-        return Evaluator.from_data(self.conf, self.val_data, writers)
+        return self.evaltype.from_data(self.conf, self.val_data, writers)
