@@ -90,8 +90,12 @@ def _pretraining_samples(conf, rsrc, labels, skip_nil=False):
     for nid, cid in enumerate(labels):
         if skip_nil and cid == conf.general.nil_symbol:
             continue
+        # Train the names and definitions ("context") separately.
         for name in rsrc.terminology.names([cid]):
-            yield (nid, name, '')  # no context in pretraining
+            yield (nid, name, '')
+        for def_ in rsrc.terminology.definitions(id_=cid):
+            if def_:  # skip empty definitions
+                yield (nid, '', def_)
 
 
 def tr_samples(conf, rsrc, labelset):
