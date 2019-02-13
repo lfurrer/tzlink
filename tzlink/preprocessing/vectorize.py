@@ -186,13 +186,22 @@ class Vectorizer:
         return self._call_vectorize(text)
 
     def _vectorize(self, text):
-        vector = self.indices(text)
-        # Pad or truncate the vector to the required size.
-        if len(vector) < self.length:
-            vector.extend(self.PAD for _ in range(len(vector), self.length))
-        elif len(vector) > self.length:
-            vector[self.length:] = []
-        return np.array(vector)
+        # Treat sequences of str as the general case.
+        if isinstance(text, str):
+            text = (text,)
+        # Create a vector with the required size and fill it with values.
+        vector = np.full(self.length, self.PAD)
+        i = 0
+        for t in text:
+            v = self.indices(t)
+            try:
+                vector[i:i+len(v)] = v
+            except ValueError:  # the text needs to be truncated
+                if i < self.length:  # some part still fits
+                    vector[i:] = v[:self.length-i]
+                break
+            i += len(v) + 1  # leave one padding symbol between texts
+        return vector
 
     def indices(self, text):
         '''

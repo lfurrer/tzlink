@@ -121,11 +121,17 @@ class Terminology:
                 names.update(e.syn)
         return names
 
-    def definitions(self, name):
+    def definitions(self, name=None, id_=None):
         '''
-        Get all definitions associated with this name.
+        Get all definitions associated with this name or ID.
         '''
-        return set(e.def_ for e in self._by_name.get(name, ()))
+        if sum(param is None for param in (name, id_)) != 1:
+            raise ValueError('exactly one of [`name`, `id_`] must be given')
+        if name is not None:
+            entries = self._by_name.get(name, ())
+        else:
+            entries = self._by_id.get(id_, ())
+        return set(e.def_ for e in entries)
 
     def canonical_ids(self, id_):
         '''

@@ -27,6 +27,8 @@ class TokenOverlap:
         '''
         Compute the Jaccard index of the stemmed tokens.
         '''
+        if not isinstance(answer, str):  # allow a sequence of str for answer
+            return max(self.overlap(query, a) for a in answer)
         q_toks = self.tokens(query, cache=True)
         a_toks = self.tokens(answer)
         intersection = q_toks.intersection(a_toks)
