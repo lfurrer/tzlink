@@ -37,7 +37,7 @@ class SummaryWriter:
         self.fn = conf.logging.prediction_fn
         self._entries = []
 
-    def update(self, mention, refs, occs, _y, _r, decision):
+    def update(self, mention, refs, occs, _r, decision):
         '''Update with outcome information per occurrence.'''
         mention = _rm_tabs_nl(mention)
         for occ in occs:
@@ -63,7 +63,7 @@ class DetailedWriter:
         self.fn = conf.logging.detailed_fn
         self._entries = {'correct': [], 'reachable': [], 'unreachable': []}
 
-    def update(self, mention, refs, occs, _, ranking, outcome):
+    def update(self, mention, refs, occs, ranking, outcome):
         '''Update with a distinct mention.'''
         category, pred = self._outcome(outcome)
         entry = (str(refs), _rm_tabs_nl(mention), occs, pred, ranking)
@@ -85,7 +85,7 @@ class DetailedWriter:
             yield ('Occs:', self._occ_summary(occs))
             yield ('Pred:', pred)
             yield ('Ranking:',)
-            for s, c, i in ranking:
+            for s, c, i, _ in ranking:
                 s = '  {:.3f}'.format(s)
                 i = ', '.join(i)
                 yield s, c, i
@@ -123,11 +123,11 @@ class TRECWriter:
         self.fn = conf.logging.trec_eval_fn
         self._entries = {'prediction': [], 'gold': []}
 
-    def update(self, _mention, _refs, occs, label, ranking, _outcome):
+    def update(self, _mention, _refs, occs, ranking, _outcome):
         '''Add a sequence of 6 and 4 elements respectively'''
         for occ in occs:
             qid = '{}-{}-{}'.format(*occ)
-            for (score, _, _), correct in zip(ranking, label):
+            for score, _, _, correct in ranking:
                 docno = len(self._entries['gold'])
                 entry_prediction = (qid, 0, docno, 0, score, 0)
                 entry_gold = (qid, 0, docno, int(correct))
@@ -224,10 +224,10 @@ class Evaluator(BaseEvaluator):
 
     def evaluate(self, data):
         for scores, ids, cands, y, mention, refs, occs in self._iterranges(data):
-            ranking = sorted(zip(scores, cands, ids), reverse=True)
+            ranking = sorted(zip(scores, cands, ids, y), reverse=True)
             decision = self._decide(ranking, ids, refs)
             for writer in self.writers:
-                writer.update(mention, refs, occs, y, ranking, decision)
+                writer.update(mention, refs, occs, ranking, decision)
             for _ in occs:
                 self._update(*decision[1:])
 
@@ -243,13 +243,13 @@ class Evaluator(BaseEvaluator):
     def _decide(self, scored, ids, refs):
         id_ = self._disambiguate(scored)
         correct = id_ in refs
-        n_ids = len(scored) and len(scored[0][-1])
+        n_ids = len(scored) and len(scored[0][2])
         reachable = any(id_ in refs for id_ in set().union(*ids))
         return id_, correct, n_ids, reachable
 
     def _disambiguate(self, scored):
         try:
-            score, _, top_ids = scored[0]
+            score, _, top_ids, _ = scored[0]
         except IndexError:
             # No candidates.
             return self.conf.general.nil_symbol
@@ -267,7 +267,7 @@ class Evaluator(BaseEvaluator):
             return next(iter(top_ids))
 
         # Look for cues in the lower-ranked candidates.
-        for _, _, ids in scored[1:]:
+        for _, _, ids, _ in scored[1:]:
             common = top_ids.intersection(ids)
             if common:
                 # Another name of the top-ranked concept(s) was among the
