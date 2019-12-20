@@ -228,8 +228,7 @@ class Evaluator(BaseEvaluator):
             decision = self._decide(ranking, ids, refs)
             for writer in self.writers:
                 writer.update(mention, refs, occs, ranking, decision)
-            for _ in occs:
-                self._update(*decision[1:])
+            self._update(*decision[1:], len(occs))
 
     @staticmethod
     def _iterranges(data):
@@ -279,15 +278,17 @@ class Evaluator(BaseEvaluator):
         # If still ambiguous, pick the lowest-ordering ID to be deterministic.
         return min(top_ids)
 
-    def _update(self, correct, n_ids, reachable):
+    def _update(self, correct, n_ids, reachable, n_occs=1):
         '''Update counts.'''
-        self.total += 1
-        self.correct += correct
-        self.unreachable += not reachable
+        self.total += n_occs
+        if correct:
+            self.correct += n_occs
+        if not reachable:
+            self.unreachable += n_occs
         if n_ids == 0:
-            self.nocandidates += 1
+            self.nocandidates += n_occs
         elif n_ids > 1:
-            self.ambiguous += 1
+            self.ambiguous += n_occs
 
     def summary(self, outfile, labels=None):
         if labels is None:
