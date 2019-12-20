@@ -11,7 +11,7 @@ Dump and evaluate predictions.
 
 import sys
 import csv
-from collections import Counter
+from collections import Counter, defaultdict
 
 from ..util.util import smart_open
 
@@ -106,6 +106,34 @@ class DetailedWriter:
         else:
             category = 'unreachable'
         return category, id_
+
+
+class BioNLPWriter:
+    """
+    Write stand-off annotations in BioNLP format.
+    """
+    def __init__(self, conf):
+        self.fn = conf.logging.bionlp_fn
+        self.NIL = conf.general.nil_symbol
+        self._entries = defaultdict(list)  # keys: docid
+
+    def update(self, mention, _refs, occs, _ranking, outcome):
+        """Update every occurrence of each mention."""
+        pred = outcome[0]
+        if pred != self.NIL:
+            for doc, start, end in occs:
+                entry = (start, end, mention, pred)
+                self._entries[doc].append(entry)
+
+    def dump(self):
+        """Write to disk."""
+        for docid, entries in self._entries.items():
+            with smart_open(self.fn.format(docid), 'w') as f:
+                entries.sort()
+                for i, (s, e, m, p) in enumerate(entries, 1):
+                    f.write(self._line_tmpl.format(i, p, s, e, _rm_tabs_nl(m)))
+
+    _line_tmpl = 'T{}\t{} {} {}\t{}\n'
 
 
 class TRECWriter:
@@ -212,6 +240,7 @@ class Evaluator(BaseEvaluator):
     _writer_names = {
         'summary': SummaryWriter,
         'rich': DetailedWriter,
+        'bionlp': BioNLPWriter,
         'trec': TRECWriter,
     }
 

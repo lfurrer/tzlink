@@ -10,16 +10,19 @@ Dataset loading utilities.
 
 
 from .terminology import Terminology
+from .craft import parse_CRAFT_corpus, parse_CRAFT_terminology
 from .ncbi_disease import parse_MEDIC_terminology, parse_NCBI_disease_corpus
 from .share_clef import parse_ShARe_CLEF_corpus, parse_SNOMED_terminology
 
 
 # Make the data/terminology loaders accessible through config names.
 corpus_loader = {
+    'craft': parse_CRAFT_corpus,
     'ncbi-disease': parse_NCBI_disease_corpus,
     'share-clef': parse_ShARe_CLEF_corpus,
 }
 dict_loader = {
+    'craft': parse_CRAFT_terminology,
     'ncbi-disease': parse_MEDIC_terminology,
     'share-clef': parse_SNOMED_terminology,
 }

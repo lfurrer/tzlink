@@ -28,11 +28,12 @@ def get_argparser(desc='Run the CNN.', pre=(), post=()):
         help='train a new model '
              '(instead of loading a previously trained one)')
     ap.add_argument(
-        '-p', '--predict', nargs='+', choices=['summary', 'rich', 'trec'],
-        type=str.lower, default=[], metavar='FMT',
+        '-p', '--predict', nargs='+', type=str.lower, default=[], metavar='FMT',
+        choices=['summary', 'rich', 'bionlp', 'trec'],
         help='produce predictions in one or more formats '
              '(summary: a line per occurrence,'
              ' rich: all candidates scored,'
+             ' bionlp: stand-off annotations,'
              ' trec: two tables for TREC)')
     ap.add_argument(
         '-r', '--record', action='store_true',
