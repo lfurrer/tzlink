@@ -18,12 +18,16 @@ def parse_CRAFT_corpus(dir_, subset, terminology=None):
     Parse a subset of the corpus.
 
     @Args:
-        dir_: path to a corpus subdirectory for one anno type
+        dir_: path to a corpus subdirectory for one anno type.
               The following directory structure is required:
               dir_/          # eg. CHEBI/
-                  bionlp/
+                  test/
                       11319941.bionlp
+                      11604102.bionlp
+                      ...
+                  train/
                       11532192.bionlp
+                      11597317.bionlp
                       ...
                   txt/
                       11319941.txt
