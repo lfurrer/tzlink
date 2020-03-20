@@ -43,7 +43,6 @@ def launch(config, record=False, **kwargs):
     '''
     conf = get_config(config)
     recorder = Recorder(conf)
-    startup.run_scripts(conf)
 
     run(conf, summary=[sys.stdout, recorder.results], **kwargs)
     if record:
@@ -73,6 +72,7 @@ def _run_train(conf, module, dumpfn, **evalparams):
     '''
     Train a model and evaluate/predict.
     '''
+    startup.run_scripts(conf)
     module.run_training(conf, dumpfn, **evalparams)
 
 
@@ -90,12 +90,12 @@ def _run_predict(conf, module, dumpfns, **evalparams):
 def _predict(conf, dumpfns, x):
     batch_size = conf.rank.batch_size
     if len(dumpfns) == 1:
-        return _predict_one(dumpfns[0], x, batch_size)
+        return _predict_one(conf, dumpfns[0], x, batch_size)
 
     # Ensemble prediction.
     with tempfile.NamedTemporaryFile() as f:
         np.savez(f, *x)  # avoid repeated pickling
-        args = [(fn, f.name, batch_size) for fn in dumpfns]
+        args = [(conf, fn, f.name, batch_size) for fn in dumpfns]
         workers = conf.rank.workers or 1
         with mp.Pool(workers, maxtasksperchild=1) as pool:
             scores = list(pool.map(_wrap_predict_one, args))
@@ -103,13 +103,14 @@ def _predict(conf, dumpfns, x):
 
 
 def _wrap_predict_one(args):
-    model_fn, x_fn, batch_size = args
+    conf, model_fn, x_fn, batch_size = args
     with np.load(x_fn) as f:
         x = [f[n] for n in sorted(f.files)]
-    return _predict_one(model_fn, x, batch_size)
+    return _predict_one(conf, model_fn, x, batch_size)
 
 
-def _predict_one(fn, x, batch_size):
+def _predict_one(conf, fn, x, batch_size):
+    startup.run_scripts(conf)
     from keras.models import load_model
     from .rank.cnn import PairwiseSimilarity
 
