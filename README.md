@@ -1,5 +1,4 @@
-# disease-normalization
-Biomedical entity linking (normalization) project
+# `tzlink`: Biomedical Entity Normalisation
 
 ## Instructions
 
